@@ -1,24 +1,19 @@
-import pandas as pd
+import logging
+import uvicorn
+
 from fastapi import FastAPI
-from fastapi.exceptions import HTTPException
-from pydantic import BaseModel
+
+from backend.api import router
+from backend.config import add_logger
+
+
+add_logger()
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI()
+app.include_router(router)
 
 
-class File(BaseModel):
-    filename: str
-    hashed_content: str
-
-
-class FileBatch(BaseModel):
-    files: list[File]
-
-
-@app.post("/v1/")
-def process(file_batch: FileBatch):
-    try:
-        print(file_batch)
-        return {"received": file_batch}
-    except Exception as e:
-        return type(e)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=6969, log_config=None)
