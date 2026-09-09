@@ -6,8 +6,12 @@ from uuid import UUID
 from fastapi import Depends, status
 from fastapi.exceptions import HTTPException
 
-from backend.database import get_staging_rdb, get_staging_storage
-from backend.database.service import RDBService, StorageService, IngestionService
+from backend.database import get_staging_repository, get_staging_storage
+from backend.database.service import (
+    IngestionRepository,
+    StorageService,
+    IngestionService,
+)
 from backend.database.schema import FileStatus
 from backend.database.errors import DuplicatedContentError
 
@@ -18,14 +22,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-RelationalDatabaseService = Annotated[RDBService, Depends(get_staging_rdb)]
+IngestionRepositoryService = Annotated[
+    IngestionRepository, Depends(get_staging_repository)
+]
 FileStorageService = Annotated[StorageService, Depends(get_staging_storage)]
 
 
 def get_ingestion_service(
-    rdb_service: RelationalDatabaseService, storage_service: FileStorageService
+    staging_repository_service: IngestionRepositoryService, storage_service: FileStorageService
 ):
-    return IngestionService(rdb_service, storage_service)
+    return IngestionService(staging_repository_service, storage_service)
 
 
 Ingestion = Annotated[IngestionService, Depends(get_ingestion_service)]

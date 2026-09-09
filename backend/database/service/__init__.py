@@ -1,5 +1,5 @@
-from .rdb import RDBService
+from .rdb import IngestionRepository
 from .storage import StorageService
 from .ingestion import IngestionService
 
-__all__ = ["RDBService", "StorageService", "IngestionService"]
+__all__ = ["IngestionRepository", "StorageService", "IngestionService"]

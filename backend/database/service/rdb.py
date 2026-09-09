@@ -13,7 +13,7 @@ from ..schema import FileInfo, FileStatus, Base
 logger = logging.getLogger(__name__)
 
 
-class RDBService:
+class IngestionRepository:
     def __init__(self, config: RDBAsyncConnectionConfig):
         self._session = config.async_session_local
         self._engine = config.async_engine

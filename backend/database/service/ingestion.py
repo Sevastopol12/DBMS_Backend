@@ -1,4 +1,4 @@
-from .rdb import RDBService
+from .rdb import IngestionRepository
 from .storage import StorageService
 from ..utils import _get_safe_filename, _serialize_ingestion
 from ..errors import DuplicatedContentError
@@ -16,8 +16,12 @@ SUPPORTED_CONTENT_TYPES = {
 
 
 class IngestionService:
-    def __init__(self, rdb_service: RDBService, storage_service: StorageService):
-        self._repository = rdb_service
+    def __init__(
+        self,
+        staging_repository_service: IngestionRepository,
+        storage_service: StorageService,
+    ):
+        self._repository = staging_repository_service
         self._storage = storage_service
 
     async def get_upload(self, file: IngestionCreate) -> IngestionResponse:
