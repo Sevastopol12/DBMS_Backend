@@ -32,7 +32,7 @@ class RDBService:
             session.add(file)
         return file
 
-    async def get(self, file_id: str) -> FileInfo | None:
+    async def get(self, file_id: UUID) -> FileInfo | None:
         async with self._session.begin() as session:
             return await session.get(FileInfo, file_id)
 
@@ -67,6 +67,24 @@ class RDBService:
                 raise DuplicatedContentError
             raise
 
-    async def get_pending_task(self, file_id: UUID, object_key: str) -> FileInfo | None:
+    async def claim(self, file_id: UUID) -> FileInfo | None:
         async with self._session.begin() as session:
-            select
+            result: FileInfo = await session.get(FileInfo, file_id)
+
+            if result is None:
+                return None
+
+            if result.status in {
+                FileStatus.PROCESSING,
+                FileStatus.SUCCEED,
+            }:
+                return None
+
+            task_info = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id)
+                .values({"status": FileStatus.QUEUED})
+                .returning(FileInfo)
+            )
+
+            return task_info
