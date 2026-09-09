@@ -47,7 +47,6 @@ class Report(Base):
 
 class FileStatus(str, Enum):
     CREATED: str = "CREATED"
-    UPLOADED: str = "UPLOADED"
     QUEUED: str = "QUEUED"
     PROCESSING: str = "PROCESSING"
     SUCCEED: str = "SUCCEED"

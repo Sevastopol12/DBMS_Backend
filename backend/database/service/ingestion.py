@@ -55,7 +55,10 @@ class IngestionService:
         if file is None:
             return None
 
-        if file.status in {FileStatus.QUEUED, FileStatus.PROCESSING}:
+        if file.status in {
+            FileStatus.QUEUED,
+            FileStatus.PROCESSING,
+        }:
             return _serialize_ingestion(file)
 
         file_metadata = self._storage.get_file_metadata(file.obj_key)
