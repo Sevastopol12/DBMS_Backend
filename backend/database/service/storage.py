@@ -1,7 +1,13 @@
-from backend.database.connection import StorageAsyncConnectionConfig
+import pandas as pd
+
 from datetime import datetime
 from asyncio import to_thread
 from typing import Any
+
+from botocore.exceptions import ClientError
+
+from backend.database.connection import StorageAsyncConnectionConfig
+from backend.database.errors import FileObjectNotFound
 
 
 class StorageService:
@@ -37,3 +43,17 @@ class StorageService:
             Bucket=self.connection_config.bucket,
             Key=obj_key,
         )
+
+    async def get(self, obj_key: str) -> pd.DataFrame:
+        try:
+            response = self.connection_config.client.get_object(
+                Bucket=self.connection_config.bucket, Key=obj_key
+            )
+            return pd.DataFrame(response["Body"])
+
+        except ClientError as exc:
+            error_code = exc.response["Error"]["Code"]
+            if error_code == "NoSuchKey":
+                raise FileObjectNotFound()
+
+            return None
