@@ -1,4 +1,4 @@
-from sqlalchemy import Text, DateTime, Integer
+from sqlalchemy import Text, DateTime, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -13,9 +13,15 @@ class Base(DeclarativeBase):
 
 class Report(Base):
     __tablename__ = "report"
-    __table_args__ = {"schema": "Diabetes"}
+    __table_args__ = (
+        UniqueConstraint("source_file_id", "source_size_bytes", name="source_unique"),
+        {"schema": "Diabetes"},
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    source_file_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    source_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     ma_bhyt: Mapped[str] = mapped_column(Text, nullable=False)
     cccd: Mapped[str] = mapped_column(Text, nullable=False)

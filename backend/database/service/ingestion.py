@@ -1,7 +1,6 @@
-from .rdb import IngestionRepository
+from .repository import IngestionRepository
 from .storage import StorageService
 from ..utils import _get_safe_filename, _serialize_ingestion
-from ..errors import DuplicatedContentError
 
 from backend.domain.models import IngestionCreate, IngestionResponse, IngestionComplete
 from backend.database.schema import FileInfo, FileStatus

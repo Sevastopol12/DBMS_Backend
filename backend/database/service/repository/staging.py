@@ -1,14 +1,14 @@
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 from datetime import datetime
 
-from ..connection import RDBAsyncConnectionConfig
-from ..errors import DuplicatedContentError
-from ..schema import FileInfo, FileStatus, Base
+from backend.database.connection import RDBAsyncConnectionConfig
+from backend.database.errors import DuplicatedContentError
+from backend.database.schema import FileInfo, FileStatus, Base
 
 logger = logging.getLogger(__name__)
 
@@ -87,4 +87,4 @@ class IngestionRepository:
                 .returning(FileInfo)
             )
 
-            return task_info
+            return task_info.scalar_one_or_none()
