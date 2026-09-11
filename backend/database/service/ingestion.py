@@ -7,6 +7,7 @@ from backend.database.schema import FileInfo, FileStatus
 
 from uuid import UUID, uuid4
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 SUPPORTED_CONTENT_TYPES = {
     "text/csv",
@@ -31,48 +32,57 @@ class IngestionService:
 
         file_id: UUID = uuid4()
         filename = _get_safe_filename(file.filename)
-        object_key: str = f"ingestion/{datetime.now():%Y_%m_%d}/{file_id}/{filename}"
+        object_key: str = f"{datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')):%Y_%m_%d}/{file_id}/{filename}"
 
-        file = FileInfo(
+        file_info = FileInfo(
             id=file_id,
             filename=filename,
             object_key=object_key,
             content_type=file.content_type,
             status=FileStatus.CREATED,
-            created_at=datetime.now(),
+            created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
         )
 
-        await self._repository.create(file)
-        presigned_url = await self._storage.get_presigned_url(
+        await self._repository.create(file_info)
+        presigned_url = self._storage.get_presigned_url(
             object_key=object_key, content_type=file.content_type
         )
 
-        return _serialize_ingestion(file, presigned_url)
+        return _serialize_ingestion(file_info, presigned_url)
 
     async def complete_upload(
         self,
         data: IngestionComplete,
     ) -> IngestionResponse | None:
-        file = await self._repository.get(data.file_id)
 
-        if file is None:
-            return None
+        try:
+            file = await self._repository.get(data.id)
 
-        if file.status in {
-            FileStatus.QUEUED,
-            FileStatus.PROCESSING,
-        }:
-            return _serialize_ingestion(file)
+            if file is None:
+                return None
 
-        file_metadata = self._storage.get_file_metadata(file.obj_key)
+            if file.status in {
+                FileStatus.QUEUED,
+                FileStatus.PROCESSING,
+            }:
+                return _serialize_ingestion(file)
 
-        if data.size_bytes == int(file_metadata.get("ContentLength", 0)):
-            raise ValueError(
-                "Uploaded object size does not match the completion request"
+            file_metadata = await self._storage.get_file_metadata(file.object_key)
+
+            if data.size_bytes != int(file_metadata.get("ContentLength", 0)):
+                raise ValueError(
+                    "Uploaded object size does not match the completion request"
+                )
+
+            complete = await self._repository.complete_upload(
+                data.id, data.content_hash, data.size_bytes, data.mappings
             )
 
-        complete = await self._repository.complete_upload(
-            data.file_id, data.content_hash, data.size_bytes, data.mappings
-        )
+            return _serialize_ingestion(complete) if complete else None
 
-        return _serialize_ingestion(complete) if complete else None
+        except Exception as exc:
+            await self._repository.update(
+                data.id,
+                {"status": FileStatus.ERROR, "error_message": str(exc)},
+            )
+            raise exc

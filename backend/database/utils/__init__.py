@@ -18,8 +18,9 @@ def _serialize_ingestion(
 ) -> IngestionResponse:
     return IngestionResponse(
         id=file.id,
+        filename=file.filename,
         object_key=file.object_key,
-        status=str(file.status),
+        status=file.status,
         presigned_url=presigned_url,
         accepted_row_count=file.accepted_row_count,
         rejected_row_count=file.rejected_row_count,

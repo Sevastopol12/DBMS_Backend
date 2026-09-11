@@ -1,6 +1,5 @@
-import pandas as pd
-
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from asyncio import to_thread
 from typing import Any
 
@@ -15,7 +14,7 @@ class StorageService:
         self.connection_config = config
 
     def get_today_folder(self) -> str:
-        return datetime.now().strftime("%Y-%m-%d")
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
 
     def get_presigned_url(self, object_key: str, content_type: str) -> str:
         return self.connection_config.client.generate_presigned_url(
@@ -23,7 +22,7 @@ class StorageService:
             ExpiresIn=60,
             Params={
                 "Bucket": self.connection_config.bucket,
-                "Key": f"{object_key}",
+                "Key": object_key,
                 "ContentType": content_type,
             },
             HttpMethod="PUT",
@@ -44,12 +43,12 @@ class StorageService:
             Key=obj_key,
         )
 
-    async def get(self, obj_key: str) -> pd.DataFrame:
+    def get(self, obj_key: str) -> bytes:
         try:
             response = self.connection_config.client.get_object(
                 Bucket=self.connection_config.bucket, Key=obj_key
             )
-            return pd.DataFrame(response["Body"])
+            return response["Body"]
 
         except ClientError as exc:
             error_code = exc.response["Error"]["Code"]

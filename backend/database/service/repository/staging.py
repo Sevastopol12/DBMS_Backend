@@ -5,6 +5,8 @@ from sqlalchemy.schema import CreateSchema
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from typing import Any
 
 from backend.database.connection import RDBAsyncConnectionConfig
 from backend.database.errors import DuplicatedContentError
@@ -30,11 +32,22 @@ class IngestionRepository:
     async def create(self, file: FileInfo) -> FileInfo | None:
         async with self._session.begin() as session:
             session.add(file)
-        return file
+            return file
 
     async def get(self, file_id: UUID) -> FileInfo | None:
         async with self._session.begin() as session:
             return await session.get(FileInfo, file_id)
+
+    async def update(self, file_id: UUID, values: dict[str, Any]) -> FileInfo | None:
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id)
+                .values(**values)
+                .returning(FileInfo)
+            )
+
+            return result.scalar_one_or_none()
 
     async def complete_upload(
         self,
@@ -49,17 +62,17 @@ class IngestionRepository:
                 "size_bytes": size_bytes,
                 "status": FileStatus.QUEUED,
                 "mappings": mappings,
-                "uploaded_at": datetime.now(),
+                "uploaded_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                 "error_code": None,
                 "error_message": None,
             }
             async with self._session.begin() as session:
-                result = await (
-                    session.execute(update(FileInfo).where(FileInfo.id == file_id))
+                result = await session.execute(
+                    update(FileInfo)
+                    .where(FileInfo.id == file_id)
                     .values(**values)
                     .returning(FileInfo)
                 )
-
                 return result.scalar_one_or_none()
 
         except IntegrityError as exc:
@@ -67,7 +80,7 @@ class IngestionRepository:
                 raise DuplicatedContentError
             raise
 
-    async def claim(self, file_id: UUID) -> FileInfo | None:
+    async def claim(self, file_id: UUID) -> tuple[str, dict[str, str]] | None:
         async with self._session.begin() as session:
             result: FileInfo = await session.get(FileInfo, file_id)
 
@@ -80,11 +93,13 @@ class IngestionRepository:
             }:
                 return None
 
-            task_info = await session.execute(
-                update(FileInfo)
-                .where(FileInfo.id == file_id)
-                .values({"status": FileStatus.QUEUED})
-                .returning(FileInfo)
-            )
+            result = (
+                await session.execute(
+                    update(FileInfo)
+                    .where(FileInfo.id == file_id)
+                    .values({"status": FileStatus.QUEUED})
+                    .returning(FileInfo.object_key, FileInfo.mappings)
+                )
+            ).one_or_none()
 
-            return task_info.scalar_one_or_none()
+            return (result.object_key, result.mappings)

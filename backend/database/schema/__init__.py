@@ -4,6 +4,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from uuid import UUID
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from enum import Enum
 
 
@@ -21,10 +22,10 @@ class Report(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     source_file_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
-    source_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
 
-    ma_bhyt: Mapped[str] = mapped_column(Text, nullable=False)
-    cccd: Mapped[str] = mapped_column(Text, nullable=False)
+    ma_bhyt: Mapped[str] = mapped_column(Text, nullable=True)
+    cccd: Mapped[str] = mapped_column(Text, nullable=True)
 
     ho_ten: Mapped[str | None] = mapped_column(Text, nullable=True)
     gioi_tinh: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -40,6 +41,7 @@ class Report(Base):
 
     icd_tha: Mapped[str | None] = mapped_column(Text, nullable=True)
     icd_dtd: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chan_doan_di_kem: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     huyet_ap_tam_truong: Mapped[str | None] = mapped_column(Text, nullable=True)
     huyet_ap_tam_thu: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -77,7 +79,7 @@ class FileInfo(Base):
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, default=lambda: datetime.now()
+        DateTime(timezone=True), nullable=True, default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
     )
     uploaded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
