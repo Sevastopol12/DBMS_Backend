@@ -7,7 +7,7 @@ def get_staging_repository() -> IngestionRepository:
 
 
 def get_production_repository() -> IngestionRepository:
-    return IngestionRepository(config=create_connection("production"))
+    return IngestionRepository(config=create_connection("application"))
 
 
 def get_staging_storage() -> StorageService:
