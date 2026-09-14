@@ -1,10 +1,13 @@
-class DatabaseError(Exception):
+class DatabaseServiceError(Exception):
     pass
 
 
-class FileDuplicatedError(DatabaseError):
-    def __init__(self, filename: str, file_hash: str):
-        super().__init__(f"File {filename} containing [{file_hash}] already recorded.")
+class DuplicatedContentError(DatabaseServiceError):
+    pass
 
 
-__all__ = ["FileDuplicatedError"]
+class FileObjectNotFound(DatabaseServiceError):
+    pass
+
+
+__all__ = ["DuplicatedContentError", "FileObjectNotFound"]
