@@ -18,7 +18,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class RDBAsyncConnectionConfig:
     async_engine: AsyncEngine
-    async_session_local: AsyncSession
+    async_session_local: async_sessionmaker[AsyncSession]
 
 
 def create_connection(db_level: str) -> RDBAsyncConnectionConfig:
