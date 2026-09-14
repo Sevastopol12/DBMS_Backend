@@ -26,6 +26,6 @@ def create_connection(db_level: str) -> RDBAsyncConnectionConfig:
         url=os.getenv(f"{db_level.upper()}_RDB_URL")
     )
     async_session: async_sessionmaker[AsyncSession] = async_sessionmaker(
-        bind=async_engine, autoflush=False, autocommit=False
+        bind=async_engine, autoflush=False, autocommit=False, expire_on_commit=False
     )
     return RDBAsyncConnectionConfig(async_engine, async_session)

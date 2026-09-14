@@ -1,18 +1,13 @@
-import logging
 import uvicorn
-
 from fastapi import FastAPI
-
-from backend.api import router
-from backend.config import add_logger
-
-
-add_logger()
-logger = logging.getLogger(__name__)
+from backend.api import upload_router, fetch_router
 
 
 app = FastAPI()
-app.include_router(router)
+
+# Upload
+app.include_router(upload_router, prefix="/upload/v1")
+app.include_router(fetch_router, prefix="/fetch/v1")
 
 
 if __name__ == "__main__":

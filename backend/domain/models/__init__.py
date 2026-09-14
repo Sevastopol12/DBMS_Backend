@@ -1,15 +1,6 @@
 from pydantic import BaseModel
-
-
-class FileRecord(BaseModel):
-    filename: str
-    hashed_value: str
-    mapping: dict[str, str]
-
-
-class FileRegister(BaseModel):
-    filename: str
-    content_type: str
+from datetime import datetime
+from uuid import UUID
 
 
 class Report(BaseModel):
@@ -39,14 +30,32 @@ class Report(BaseModel):
     dieu_tri: str | None = None
 
 
-class ResponseURL(BaseModel):
-    presigned_url: str
-
-
-class RecordedResult(BaseModel):
+class IngestionCreate(BaseModel):
     filename: str
-    location: str
-    created_at: str
+    content: str | None = None
+    content_type: str
 
 
-__all__ = ["Report", "FileRegister", "FileRecord", "ResponseURL", "RecordedResult"]
+class IngestionComplete(BaseModel):
+    id: UUID
+    content_hash: str
+    size_bytes: int | None = None
+    mappings: dict[str, str] | None = None
+
+
+class IngestionResponse(BaseModel):
+    id: UUID
+    object_key: str
+    status: str
+
+    presigned_url: str | None = None
+
+    error_code: str | None = None
+    error_message: str | None = None
+    accepted_row_count: int = 0
+    rejected_row_count: int = 0
+
+    created_at: datetime
+
+
+__all__ = ["Report", "IngestionResponse", "IngestionCreate", "IngestionComplete"]
