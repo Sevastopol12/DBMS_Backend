@@ -1,17 +1,36 @@
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID
+from typing import Any
+from enum import Enum
 
 
-class Report(BaseModel):
-    ma_bhyt: str
-    cccd: str
+class FileStatus(str, Enum):
+    CREATED: str = "CREATED"
+    QUEUED: str = "QUEUED"
+    PROCESSING: str = "PROCESSING"
+    SUCCEED: str = "SUCCEED"
+    ERROR: str = "ERROR"
 
+
+class TaskReport(BaseModel):
+    report_rows: list[dict[str, Any]]
+    logs: list[str]
+    accepted_row: int
+    rejected_row: int
+
+
+class ReportRow(BaseModel):
+    ma_bhyt: str | None = None
+    cccd: str | None = None
+
+    # Demographic
     ho_ten: str | None = None
     gioi_tinh: str | None = None
     nam_sinh: str | None = None
     sdt: str | None = None
 
+    # Address
     dia_chi: str | None = None
     phuong_xa: str | None = None
     quan_huyen: str | None = None
@@ -19,10 +38,17 @@ class Report(BaseModel):
 
     ngay_kham: str | None = None
 
+    # Clinical metrics
+
+    # Icd hypertension
     icd_tha: str | None = None
+    # Icd diabetes
     icd_dtd: str | None = None
+    # Diastolic blood pressure
     huyet_ap_tam_truong: str | None = None
+    # Systolic blood pressure
     huyet_ap_tam_thu: str | None = None
+
     chi_so_duong_huyet: str | None = None
     chi_so_hba1c: str | None = None
 
@@ -45,8 +71,9 @@ class IngestionComplete(BaseModel):
 
 class IngestionResponse(BaseModel):
     id: UUID
+    filename: str | None = None
     object_key: str
-    status: str
+    status: FileStatus
 
     presigned_url: str | None = None
 
@@ -58,4 +85,35 @@ class IngestionResponse(BaseModel):
     created_at: datetime
 
 
-__all__ = ["Report", "IngestionResponse", "IngestionCreate", "IngestionComplete"]
+class TransformResult(BaseModel):
+    file_id: UUID
+    accepted_row_count: int
+    rejected_row_count: int
+
+
+class ErrorLog(BaseModel):
+    row_number: int
+    status: str
+    normalized: dict[str, Any]
+    issues: dict[str, Any]
+
+
+class MappingRequest(BaseModel):
+    filename: str
+    columns: list[str]
+
+
+class MappingResponse(BaseModel):
+    filename: str
+    mapping: dict[str, str | None] | None = None
+
+
+__all__ = [
+    "ReportRow",
+    "IngestionResponse",
+    "IngestionCreate",
+    "IngestionComplete",
+    "FileStatus",
+    "MappingRequest",
+    "MappingResponse",
+]

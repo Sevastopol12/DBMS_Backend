@@ -83,6 +83,10 @@ class IngestionService:
         except Exception as exc:
             await self._repository.update(
                 data.id,
-                {"status": FileStatus.ERROR, "error_message": str(exc)},
+                {
+                    "status": FileStatus.ERROR,
+                    "error_code": "INTERNAL_ERROR",
+                    "error_message": str(exc),
+                },
             )
             raise exc
