@@ -5,14 +5,15 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from uuid import UUID
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from enum import Enum
+
+from backend.domain.models import FileStatus
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class Report(Base):
+class SystemReport(Base):
     __tablename__ = "report"
     __table_args__ = (
         UniqueConstraint("source_file_id", "source_size_bytes", name="source_unique"),
@@ -53,14 +54,6 @@ class Report(Base):
     dieu_tri: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class FileStatus(str, Enum):
-    CREATED: str = "CREATED"
-    QUEUED: str = "QUEUED"
-    PROCESSING: str = "PROCESSING"
-    SUCCEED: str = "SUCCEED"
-    ERROR: str = "ERROR"
-
-
 class FileInfo(Base):
     __tablename__ = "ingestion_files"
     __table_args__ = {"schema": "Files"}
@@ -79,7 +72,9 @@ class FileInfo(Base):
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        DateTime(timezone=True),
+        nullable=True,
+        default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
     )
     uploaded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -97,4 +92,4 @@ class FileInfo(Base):
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-__all__ = ["Report", "FileInfo", "Report", "Base"]
+__all__ = ["SystemReport", "FileInfo", "Base"]

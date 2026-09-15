@@ -80,26 +80,21 @@ class IngestionRepository:
                 raise DuplicatedContentError
             raise
 
-    async def claim(self, file_id: UUID) -> tuple[str, dict[str, str]] | None:
+    async def claim(self, file_id: UUID) -> tuple[str, dict | None] | None:
+        """Atomically transition QUEUED → PROCESSING. Returns (object_key, mappings) or None."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from sqlalchemy import update
+        
         async with self._session.begin() as session:
-            result: FileInfo = await session.get(FileInfo, file_id)
-
-            if result is None:
-                return None
-
-            if result.status in {
-                FileStatus.PROCESSING,
-                FileStatus.SUCCEED,
-            }:
-                return None
-
-            result = (
-                await session.execute(
-                    update(FileInfo)
-                    .where(FileInfo.id == file_id)
-                    .values({"status": FileStatus.QUEUED})
-                    .returning(FileInfo.object_key, FileInfo.mappings)
-                )
-            ).one_or_none()
-
-            return (result.object_key, result.mappings)
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id, FileInfo.status == FileStatus.QUEUED)
+                .values({
+                    "status": FileStatus.PROCESSING,
+                    "started_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                })
+                .returning(FileInfo.object_key, FileInfo.mappings)
+            )
+            row = result.one_or_none()
+        return (row.object_key, row.mappings) if row is not None else None
