@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.repository.production import ReportRepository
+from backend.domain.ingestion.contracts import TransformResult
 from backend.domain.models import FileStatus
 
 
@@ -34,7 +35,14 @@ class FileProcessor:
 
         object_key, mappings = claimed
         try:
-            file_bytes = self._storage.get(object_key).read()
+            file_bytes = self._storage.get(object_key)
+            if file_bytes is None:
+                raise ValueError("File has no content")
+
+        except ValueError as exc:
+            await self._fail(file_id, "NULL CONTENT", str(exc))
+            return
+
         except Exception as exc:
             await self._fail(file_id, "STORAGE_UNAVAILABLE", str(exc))
             return
@@ -51,7 +59,9 @@ class FileProcessor:
             file_info = await self._staging.get(file_id)
             size_bytes = file_info.size_bytes if file_info else None
             await self._production.bulk_insert(
-                result.rows, source_file_id=file_id, source_size_bytes=size_bytes
+                result.accepted_rows,
+                source_file_id=file_id,
+                source_size_bytes=size_bytes,
             )
         except Exception as exc:
             await self._fail(file_id, "PERSISTENCE_FAILED", str(exc))
@@ -69,8 +79,8 @@ class FileProcessor:
 
     async def _apply_transform(
         self, file_id: UUID, file_bytes: bytes, mappings: dict | None
-    ):
-        #TODO
+    ) -> TransformResult:
+        # TODO
         ...
 
     async def _fail(self, file_id: UUID, code: str, message: str) -> None:
