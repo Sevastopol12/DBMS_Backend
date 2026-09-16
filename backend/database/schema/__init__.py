@@ -93,4 +93,26 @@ class FileInfo(Base):
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-__all__ = ["SystemReport", "FileInfo", "Base"]
+class FileErrorRecord(Base):
+    __tablename__ = "ingestion_errors"
+    __table_args__ = {"schema": "Files"}
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    file_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False, index=True
+    )
+    column: Mapped[str] = mapped_column(Text, nullable=False)
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str] = mapped_column(Text, nullable=False)
+    issue_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    severity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+    )
+
+
+__all__ = ["SystemReport", "FileInfo", "Base", "FileErrorRecord"]
