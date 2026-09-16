@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import zipfile
-from uuid import NAMESPACE_URL, uuid5
+from uuid import UUID
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
@@ -28,7 +27,7 @@ class TabularSourceReader(SourceDatasetReader):
     """Read comma-delimited UTF-8 CSV and first-sheet XLSX files."""
 
     def read(
-        self, file_bytes: bytes, filename: str, source_file_id: str
+        self, file_bytes: bytes, filename: str, source_file_id: UUID
     ) -> SourceDataset:
         if not isinstance(file_bytes, bytes):
             raise UnreadableInputError("Source input must be bytes")
@@ -43,7 +42,7 @@ class TabularSourceReader(SourceDatasetReader):
         raise UnsupportedFormatError(f"Unsupported source format for {filename!r}")
 
     def _read_csv(
-        self, file_bytes: bytes, filename: str, source_file_id: str
+        self, file_bytes: bytes, filename: str, source_file_id: UUID
     ) -> SourceDataset:
         if not file_bytes or not file_bytes.strip():
             raise EmptyFileError(f"CSV file {filename!r} is empty")
@@ -96,7 +95,7 @@ class TabularSourceReader(SourceDatasetReader):
         )
 
     def _read_xlsx(
-        self, file_bytes: bytes, filename: str, source_file_id: str
+        self, file_bytes: bytes, filename: str, source_file_id: UUID
     ) -> SourceDataset:
         if not file_bytes:
             raise EmptyFileError(f"XLSX file {filename!r} is empty")
@@ -150,7 +149,7 @@ class TabularSourceReader(SourceDatasetReader):
 
 
 def read_source_dataset(
-    file_bytes: bytes, filename: str, source_file_id: str
+    file_bytes: bytes, filename: str, source_file_id: UUID
 ) -> SourceDataset:
     """Convenience entry point for callers that do not need a reader instance."""
 
