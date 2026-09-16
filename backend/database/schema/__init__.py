@@ -16,13 +16,14 @@ class Base(DeclarativeBase):
 class SystemReport(Base):
     __tablename__ = "report"
     __table_args__ = (
-        UniqueConstraint("source_file_id", "source_size_bytes", name="source_unique"),
+        UniqueConstraint("source_file_id", "row_index", name="source_unique"),
         {"schema": "Diabetes"},
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     source_file_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    row_index: Mapped[str] = mapped_column(Text, nullable=False)
     source_size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
 
     ma_bhyt: Mapped[str] = mapped_column(Text, nullable=True)
@@ -67,8 +68,8 @@ class FileInfo(Base):
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(default=FileStatus.CREATED)
 
-    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=False)
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime | None] = mapped_column(
