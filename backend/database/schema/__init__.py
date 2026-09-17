@@ -73,7 +73,7 @@ class FileInfo(Base):
 
     # The digest is only known after upload completion.
     content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime | None] = mapped_column(
@@ -101,7 +101,11 @@ class FileErrorRecord(Base):
     __tablename__ = "ingestion_errors"
     __table_args__ = (
         UniqueConstraint(
-            "file_id", "row_number", "column", "target_field", "issue_code",
+            "file_id",
+            "row_number",
+            "column",
+            "target_field",
+            "issue_code",
             name="ingestion_error_lineage_unique",
         ),
         {"schema": "Files"},
