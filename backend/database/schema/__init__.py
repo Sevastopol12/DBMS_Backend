@@ -57,7 +57,10 @@ class SystemReport(Base):
 
 class FileInfo(Base):
     __tablename__ = "ingestion_files"
-    __table_args__ = {"schema": "Files"}
+    __table_args__ = (
+        UniqueConstraint("content_hash", name="ingestion_files_content_hash_unique"),
+        {"schema": "Files"},
+    )
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, nullable=False
@@ -68,7 +71,8 @@ class FileInfo(Base):
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(default=FileStatus.CREATED)
 
-    content_hash: Mapped[str | None] = mapped_column(Text, nullable=False)
+    # The digest is only known after upload completion.
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=False)
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -95,15 +99,24 @@ class FileInfo(Base):
 
 class FileErrorRecord(Base):
     __tablename__ = "ingestion_errors"
-    __table_args__ = {"schema": "Files"}
+    __table_args__ = (
+        UniqueConstraint(
+            "file_id", "row_number", "column", "target_field", "issue_code",
+            name="ingestion_error_lineage_unique",
+        ),
+        {"schema": "Files"},
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     file_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), nullable=False, index=True
     )
     column: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_column: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_field: Mapped[str | None] = mapped_column(Text, nullable=True)
     row_number: Mapped[int] = mapped_column(Integer, nullable=False)
     raw_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    normalized_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str] = mapped_column(Text, nullable=False)
     issue_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     severity: Mapped[str | None] = mapped_column(Text, nullable=True)
