@@ -471,6 +471,54 @@ DIRECT_ALIASES: dict[str, AliasEntry] = {
 
 
 # ---------------------------------------------------------------------------
+# Rule-driven extractor metadata for non-structural mappings
+# ---------------------------------------------------------------------------
+# The mapping layer declares extractor intent from the resolved source-header
+# rule.  The pipeline must not infer extraction behavior from target-field names.
+EXTRACTOR_RULES: dict[str, dict[str, object]] = {
+    # Direct gender labels need semantic normalization rather than raw copying.
+    **{
+        header: {"extractor": "extract_gender", "transformation": {"rule_type": "VALUE_NORMALIZATION"}}
+        for header in (
+            "gioi_tinh",
+            "gioi_tinh_bn",
+            "gioi_tinh_benh_nhan",
+            "patient_gender",
+            "patient_sex",
+            "gender",
+            "sex",
+            "gioi",
+            "gt",
+        )
+    },
+    # Visit dates are parsed as dates.  DOB is handled by the DERIVED structural
+    # rule below so that its year-only semantics remain explicit in mapping data.
+    **{
+        header: {"extractor": "extract_date", "transformation": {"rule_type": "DATE_PARSE"}}
+        for header in (
+            "ngay_kham",
+            "ngay_kham_benh",
+            "ngay_kcb",
+            "ngay_kham_bn",
+            "ngay_kham_benh_nhan",
+            "ngay_kham_tai_co_so",
+            "ngay_kham_chua_benh",
+            "ngay_kham_suc_khoe",
+            "ngay_gio_kham",
+            "ngay_vao_kham",
+            "ngay_dieu_tri",
+            "visit_date",
+            "exam_date",
+            "examination_date",
+            "date_of_visit",
+            "checkup_date",
+            "date",
+        )
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # STRUCTURAL_RULES
 # ---------------------------------------------------------------------------
 # Each rule describes a relationship between *source column patterns* and
@@ -510,6 +558,7 @@ STRUCTURAL_RULES: list[dict] = [
         ],
         "targets": ["huyet_ap_tam_thu", "huyet_ap_tam_truong"],
         "extractor": "extract_blood_pressure",
+        "mapping_mode": "fan_out",
         "description": (
             "A single source column containing 'systolic/diastolic' notation "
             "(e.g. '120/80') maps to both huyet_ap_tam_thu and huyet_ap_tam_truong."
@@ -542,6 +591,7 @@ STRUCTURAL_RULES: list[dict] = [
         ],
         "targets": ["icd_tha", "icd_dtd"],
         "extractor": "extract_combined_icd",
+        "mapping_mode": "fan_out",
         "description": (
             "A single source column that encodes both the hypertension ICD code "
             "(icd_tha) and the diabetes ICD code (icd_dtd), typically separated "
@@ -554,6 +604,18 @@ STRUCTURAL_RULES: list[dict] = [
         "patterns": ["nam", "nu", "male", "female", "gioi_tinh_nam", "gioi_tinh_nu"],
         "target": "gioi_tinh",
         "extractor": "extract_indicator_gender",
+        "mapping_mode": "multi_source",
+        "min_sources": 1,
+        "transformation": {
+            "indicator_columns": {
+                "nam": "Nam",
+                "nu": "Nữ",
+                "male": "Nam",
+                "female": "Nữ",
+                "gioi_tinh_nam": "Nam",
+                "gioi_tinh_nu": "Nữ",
+            }
+        },
         "description": (
             "Separate boolean indicator columns for male (Nam) and female (Nữ) "
             "together encode a single gender field."
@@ -564,6 +626,8 @@ STRUCTURAL_RULES: list[dict] = [
         "patterns": ["ho", "ten"],
         "target": "ho_ten",
         "extractor": "extract_split_name",
+        "mapping_mode": "multi_source",
+        "min_sources": 2,
         "description": (
             "Separate surname (Họ) and given-name (Tên) columns are concatenated "
             "to produce a full name."
@@ -574,6 +638,8 @@ STRUCTURAL_RULES: list[dict] = [
         "patterns": ["ngay_sinh", "ngay_thang_nam_sinh", "dob", "date_of_birth"],
         "target": "nam_sinh",
         "extractor": "extract_year_from_date",
+        "mapping_mode": "single",
+        "transformation": {"date_mode": "year"},
         "description": (
             "A full date-of-birth column; the birth year is extracted as nam_sinh."
         ),

@@ -8,6 +8,7 @@ from .date import DateExtractor
 from .direct import DirectExtractor
 from .gender import GenderExtractor
 from .icd import ICDExtractor
+from .name import SplitNameExtractor
 
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "ExtractionResult",
     "GenderExtractor",
     "ICDExtractor",
+    "SplitNameExtractor",
     "ValueExtractor",
 ]

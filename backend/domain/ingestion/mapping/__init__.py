@@ -4,7 +4,7 @@ Public surface
 --------------
 - :func:`resolve_headers` – Map a list of raw source headers to an
   authoritative :class:`MappingReport`.
-- :class:`MappingReport` – Complete resolution result with decisions,
+- :class:`MappingReport` – Complete resolution result with operations and decisions,
   unknown headers, ambiguous headers, and duplicate-target detection.
 - :class:`ExtendedMappingDecision` – Per-column mapping decision, including
   original header, normalized header, target field, method, confidence,
@@ -16,13 +16,14 @@ Public surface
 
 from __future__ import annotations
 
-from .aliases import CANONICAL_FIELDS, DIRECT_ALIASES, STRUCTURAL_RULES, AliasEntry
+from .aliases import CANONICAL_FIELDS, DIRECT_ALIASES, EXTRACTOR_RULES, STRUCTURAL_RULES, AliasEntry
 from .engine import ExtendedMappingDecision, MappingReport, resolve_headers
 
 __all__ = [
     "AliasEntry",
     "CANONICAL_FIELDS",
     "DIRECT_ALIASES",
+    "EXTRACTOR_RULES",
     "STRUCTURAL_RULES",
     "ExtendedMappingDecision",
     "MappingReport",

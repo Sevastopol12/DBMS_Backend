@@ -11,6 +11,7 @@ from backend.domain.ingestion.contracts import (
     CanonicalRecord,
     IssueSeverity,
     MappingMethod,
+    MappingOperation,
     MappingPlan,
     QualityIssue,
     TransformResult,
@@ -23,8 +24,10 @@ from backend.domain.ingestion.extraction import (
     DirectExtractor,
     GenderExtractor,
     ICDExtractor,
+    SplitNameExtractor,
 )
 from backend.domain.ingestion.mapping import resolve_headers
+from backend.domain.ingestion.header import normalize
 from backend.domain.ingestion.quality import RowQualityPolicy, quality_issue
 from backend.domain.ingestion.reader import read_source_dataset
 from backend.domain.ingestion.validation import (
@@ -95,12 +98,18 @@ class TransformationPipeline:
 
         plan = MappingPlan(
             source_file_id=source_file_id,
+            operations=list(report.operations),
             decisions=[item.decision for item in report.decisions],
         )
 
-        eligible, schema_issues = self._eligible_decisions(
-            report.decisions, source_file_id
+        eligible, schema_issues = self._eligible_operations(
+            report.operations, source_file_id
         )
+        eligible_decisions = [
+            decision
+            for decision in report.decisions
+            if decision.operation_id in {operation.operation_id for operation in eligible}
+        ]
 
         accepted: list[CanonicalRecord] = []
         rejected = []
@@ -110,10 +119,14 @@ class TransformationPipeline:
         for row in dataset.rows:
             row_issues = list(schema_issues(row.row_number, row.raw_values))
 
-            # Validate ID
             identifier_validation_issues: list[QualityIssue] = []
             identifier_sources = {
-                field: [d.original_header for d in eligible if d.target_field == field]
+                field: [
+                    source
+                    for operation in eligible
+                    if field in operation.target_fields
+                    for source in operation.source_columns
+                ]
                 for field in ("cccd", "ma_bhyt")
             }
 
@@ -132,41 +145,24 @@ class TransformationPipeline:
             values: dict[str, Any] = {}
             results: dict[str, ValidationResult] = {}
 
-            processed_fanout_sources: set[str] = set()
-
-            for decision in eligible:
-                targets_for_source = [
-                    d.target_field
-                    for d in eligible
-                    if d.original_header == decision.original_header
-                ]
-
-                if (
-                    len(targets_for_source) > 1
-                    and decision.original_header in processed_fanout_sources
-                ):
-                    continue
-
-                extraction = self._extract(decision, eligible, row.raw_values)
-
-                if len(targets_for_source) > 1:
-                    processed_fanout_sources.add(decision.original_header)
+            for operation in eligible:
+                extraction = self._extract(operation, row.raw_values)
 
                 for field, extracted_value in extraction.values.items():
                     # Multiple mapped identifier columns are retained for row-level
-                    # comparison.  The first header-order value is deterministic;
-                    # conflicts are reported below and never silently accepted.
+                    # comparison.  Header order remains deterministic; conflicts
+                    # are reported by the identifier validator.
                     if field not in values or field not in {"cccd", "ma_bhyt"}:
                         values[field] = extracted_value
 
                 for extraction_issue in extraction.issues:
-                    for target in extraction_issue.target_fields:
+                    for target in extraction_issue.target_fields or operation.target_fields:
                         source = (
                             extraction_issue.source_columns[0]
                             if extraction_issue.source_columns
-                            else "<row>"
+                            else operation.source_columns[0]
                         )
-                        raw = extraction_issue.raw_values.get(source)
+                        raw_value = extraction_issue.raw_values.get(source)
                         result = ValidationResult(
                             status=ValidationStatus.INVALID,
                             normalized_value=None,
@@ -180,10 +176,10 @@ class TransformationPipeline:
                             source_row_number=row.row_number,
                             source_column=source,
                             normalized_column=self._normalized_source_for(
-                                source, eligible
+                                source, eligible_decisions
                             ),
                             target_field=target,
-                            raw_value=raw,
+                            raw_value=raw_value,
                             result=result,
                         )
                         if issue:
@@ -205,12 +201,12 @@ class TransformationPipeline:
                 else:
                     values[field] = result.normalized_value
                 results[field] = result
-                source = self._source_for(field, eligible)
+                source = self._source_for(field, eligible_decisions)
                 issue = quality_issue(
                     source_file_id=source_file_id,
                     source_row_number=row.row_number,
                     source_column=source,
-                    normalized_column=self._normalized_source_for(source, eligible),
+                    normalized_column=self._normalized_source_for(source, eligible_decisions),
                     target_field=field,
                     raw_value=row.raw_values.get(source),
                     result=result,
@@ -218,7 +214,6 @@ class TransformationPipeline:
                 if issue:
                     row_issues.append(issue)
 
-            # Required fields are checked even if unmapped or absent.
             for field in self.required_fields:
                 if field not in results:
                     result = ValidationResult(
@@ -228,14 +223,14 @@ class TransformationPipeline:
                         severity=IssueSeverity.ERROR,
                     )
                     results[field] = result
-                    source = self._source_for(field, eligible)
+                    source = self._source_for(field, eligible_decisions)
                     row_issues.append(
                         QualityIssue(
                             source_file_id=source_file_id,
                             source_row_number=row.row_number,
                             source_column=source,
                             normalized_column=self._normalized_source_for(
-                                source, eligible
+                                source, eligible_decisions
                             ),
                             target_field=field,
                             raw_value=row.raw_values.get(source),
@@ -256,7 +251,7 @@ class TransformationPipeline:
             )
             if candidate.cccd is not None:
                 cross_field_issues = validate_cccd_cross_fields(
-                    row_context, candidate, self._source_for("cccd", eligible)
+                    row_context, candidate, self._source_for("cccd", eligible_decisions)
                 )
                 identifier_validation_issues.extend(cross_field_issues)
                 row_issues.extend(cross_field_issues)
@@ -274,7 +269,7 @@ class TransformationPipeline:
             else:
                 accepted.append(candidate)
                 source_columns_by_row[row.row_number] = {
-                    field: self._source_for(field, eligible)
+                    field: self._source_for(field, eligible_decisions)
                     for field in ("cccd", "ma_bhyt")
                     if getattr(candidate, field) is not None
                 }
@@ -307,102 +302,114 @@ class TransformationPipeline:
             quality_issues=issues,
         )
 
-    def _eligible_decisions(
-        self, decisions: list[Any], source_file_id: UUID
-    ) -> tuple[list[Any], Callable[[int, dict[str, Any]], Iterable[QualityIssue]]]:
+    def _eligible_operations(
+        self, operations: list[MappingOperation], source_file_id: UUID
+    ) -> tuple[list[MappingOperation], Callable[[int, dict[str, Any]], Iterable[QualityIssue]]]:
         counts = Counter(
-            d.target_field for d in decisions if d.target_field in _CANONICAL_FIELDS
+            target
+            for operation in operations
+            for target in operation.target_fields
+            if target in _CANONICAL_FIELDS
         )
 
         ineligible = [
-            d
-            for d in decisions
+            operation
+            for operation in operations
             if (
-                d.method is MappingMethod.UNKNOWN
-                or d.is_ambiguous
-                or d.target_field not in _CANONICAL_FIELDS
-                or (counts.get(d.target_field, 0) > 1 and d.target_field not in {"cccd", "ma_bhyt"})
+                operation.method is MappingMethod.UNKNOWN
+                or operation.is_ambiguous
+                or any(target not in _CANONICAL_FIELDS for target in operation.target_fields)
+                or any(
+                    counts.get(target, 0) > 1
+                    and target not in {"cccd", "ma_bhyt"}
+                    for target in operation.target_fields
+                )
             )
         ]
-        eligible = [d for d in decisions if d not in ineligible]
+        eligible = [operation for operation in operations if operation not in ineligible]
 
         def schema_issues(
             row_number: int, raw: dict[str, Any]
         ) -> Iterable[QualityIssue]:
-            for d in ineligible:
-                if d.method is MappingMethod.UNKNOWN:
+            for operation in ineligible:
+                source = operation.source_columns[0]
+                normalized = normalize(source)
+                if operation.method is MappingMethod.UNKNOWN:
                     code, severity, message = (
                         "UNKNOWN_SOURCE_COLUMN",
                         IssueSeverity.WARNING,
-                        d.reason or "Unknown source column.",
+                        operation.reason or "Unknown source column.",
                     )
                 else:
                     code, severity, message = (
                         "AMBIGUOUS_MAPPING",
                         IssueSeverity.WARNING,
-                        d.ambiguity_note or "Mapping requires an explicit override.",
+                        operation.ambiguity_note or "Mapping requires an explicit override.",
                     )
-                yield QualityIssue(
-                    source_file_id=source_file_id,
-                    source_row_number=row_number,
-                    source_column=d.original_header,
-                    normalized_column=d.normalized_header,
-                    target_field=d.target_field,
-                    raw_value=raw.get(d.original_header),
-                    normalized_value=None,
-                    issue_code=code,
-                    severity=severity,
-                    message=message,
-                )
+                for target in operation.target_fields:
+                    yield QualityIssue(
+                        source_file_id=source_file_id,
+                        source_row_number=row_number,
+                        source_column=source,
+                        normalized_column=normalized,
+                        target_field=target,
+                        raw_value=raw.get(source),
+                        normalized_value=None,
+                        issue_code=code,
+                        severity=severity,
+                        message=message,
+                    )
 
         return eligible, schema_issues
 
-    def _extract(self, decision: Any, decisions: list[Any], raw: dict[str, Any]):
-        source_values = {
-            column: raw.get(column) for column in decision.decision.source_columns
-        }
-        # Structural fan-out decisions need one extraction per source column.
-        same_source_targets = [
-            d.target_field
-            for d in decisions
-            if d.original_header == decision.original_header
-        ]
+    @staticmethod
+    def _extract(operation: MappingOperation, raw: dict[str, Any]):
+        source_values = {column: raw.get(column) for column in operation.source_columns}
+        config = operation.transformation
+        target = operation.target_fields[0]
+        extractor_name = operation.extractor
 
-        if (
-            decision.target_field in {"huyet_ap_tam_thu", "huyet_ap_tam_truong"}
-            and len(same_source_targets) == 2
-        ):
-            return BloodPressureExtractor().extract(source_values=source_values)
-
-        if decision.target_field == "gioi_tinh":
-            return GenderExtractor().extract(
-                raw.get(decision.original_header),
-                source_column=decision.original_header,
+        if extractor_name == "direct":
+            return DirectExtractor(target).extract(
+                raw.get(operation.source_columns[0]),
+                source_column=operation.source_columns[0],
             )
-
-        if decision.target_field == "nam_sinh":
-            return DateExtractor("nam_sinh").extract(
-                raw.get(decision.original_header),
-                source_column=decision.original_header,
+        if extractor_name == "extract_gender":
+            return GenderExtractor(target).extract(
+                raw.get(operation.source_columns[0]),
+                source_column=operation.source_columns[0],
             )
-
-        if decision.target_field == "ngay_kham":
-            return DateExtractor("ngay_kham").extract(
-                raw.get(decision.original_header),
-                source_column=decision.original_header,
+        if extractor_name == "extract_indicator_gender":
+            return GenderExtractor(
+                target,
+                indicator_columns=config.get("indicator_columns") or {},
+            ).extract(source_values=source_values)
+        if extractor_name == "extract_blood_pressure":
+            return BloodPressureExtractor(
+                systolic_field=operation.target_fields[0],
+                diastolic_field=operation.target_fields[1],
+                separators=tuple(config.get("separators") or ("/",)),
+            ).extract(source_values=source_values)
+        if extractor_name == "extract_combined_icd":
+            return ICDExtractor(
+                target_fields=operation.target_fields,
+                separators=tuple(config.get("separators") or ("/",)),
+            ).extract(source_values=source_values)
+        if extractor_name == "extract_split_name":
+            return SplitNameExtractor(target).extract(source_values=source_values)
+        if extractor_name == "extract_year_from_date":
+            return DateExtractor(target).extract(
+                raw.get(operation.source_columns[0]),
+                source_column=operation.source_columns[0],
             )
-
-        if (
-            decision.target_field in {"icd_tha", "icd_dtd"}
-            and len(same_source_targets) == 2
-        ):
-            return ICDExtractor(target_fields=("icd_tha", "icd_dtd")).extract(
-                source_values=source_values
+        if extractor_name == "extract_date":
+            return DateExtractor(
+                target, slash_convention=config.get("slash_convention")
+            ).extract(
+                raw.get(operation.source_columns[0]),
+                source_column=operation.source_columns[0],
             )
-
-        return DirectExtractor(decision.target_field).extract(
-            raw.get(decision.original_header), source_column=decision.original_header
-        )
+        raise ValueError(f"Unknown mapping extractor {extractor_name!r}")
 
     def _validate(
         self, field: str, value: Any, values: dict[str, Any]
@@ -418,14 +425,17 @@ class TransformationPipeline:
     def _source_for(field: str, decisions: list[Any]) -> str:
         for decision in decisions:
             if decision.target_field == field:
-                return decision.original_header
+                return decision.source_columns[0]
         return "<unmapped>"
 
     @staticmethod
     def _normalized_source_for(source: str, decisions: list[Any]) -> str | None:
         for decision in decisions:
-            if decision.original_header == source:
-                return decision.normalized_header
+            for column, normalized in zip(
+                decision.source_columns, decision.normalized_columns, strict=True
+            ):
+                if column == source:
+                    return normalized
         return None
 
 

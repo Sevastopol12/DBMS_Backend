@@ -61,20 +61,55 @@ class SourceDataset(BaseModel):
     rows: list[SourceRow] = Field(default_factory=list)
 
 
-class MappingDecision(BaseModel):
-    """A mapping from one or more original source columns to one semantic field."""
+class MappingOperation(BaseModel):
+    """Authoritative unit of mapping and extraction intent.
 
+    An operation may consume one or more source columns and produce one or more
+    canonical targets.  Fan-out operations keep a single operation identity so
+    downstream extraction happens once for the complete source group.
+    """
+
+    operation_id: str = Field(min_length=1)
+    source_columns: list[str] = Field(min_length=1)
+    target_fields: list[str] = Field(min_length=1)
+    method: MappingMethod
+    confidence: float = Field(ge=0, le=1)
+    reason: str | None = None
+    extractor: str = "direct"
+    transformation: dict[str, Any] = Field(default_factory=dict)
+    is_ambiguous: bool = False
+    ambiguity_note: str | None = None
+
+
+class MappingDecision(BaseModel):
+    """Flattened compatibility view of one operation-to-target mapping.
+
+    ``operation_id`` associates fan-out decisions produced by the same mapping
+    operation.  ``source_columns`` remains the complete input group, including
+    multi-column transformations.
+    """
+
+    operation_id: str = "legacy"
     source_columns: list[str] = Field(min_length=1)
     target_field: str = Field(min_length=1)
     method: MappingMethod
     confidence: float = Field(ge=0, le=1)
     reason: str | None = None
+    extractor: str = "direct"
+    transformation: dict[str, Any] = Field(default_factory=dict)
+    is_ambiguous: bool = False
+    ambiguity_note: str | None = None
 
 
 class MappingPlan(BaseModel):
-    """The complete set of mapping decisions resolved for an input file."""
+    """The complete mapping contract resolved for an input file.
+
+    ``operations`` is authoritative.  ``decisions`` is a flattened projection
+    retained for consumers that expect one target field per decision.
+    """
 
     source_file_id: UUID
+    operations: list[MappingOperation] = Field(default_factory=list)
     decisions: list[MappingDecision] = Field(default_factory=list)
 
 

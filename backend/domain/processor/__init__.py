@@ -55,6 +55,11 @@ class FileProcessor:
             file_info = await self._staging.get(file_id)
             if file_info is None:
                 raise ValueError("File metadata is unavailable")
+        except Exception as exc:
+            await self._fail(file_id, "METADATA_UNAVAILABLE", str(exc))
+            raise InfrastructureProcessingError("File metadata unavailable") from exc
+
+        try:
             result = await self._apply_transform(
                 file_id, file_bytes, file_info.filename, mappings
             )
@@ -65,7 +70,6 @@ class FileProcessor:
 
         # Persist accepted rows
         try:
-            file_info = await self._staging.get(file_id)
             size_bytes = file_info.size_bytes if file_info else None
             await self._production.bulk_insert(
                 result.accepted_rows,
