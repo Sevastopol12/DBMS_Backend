@@ -9,15 +9,16 @@ result_backend = os.getenv("BROKER_URL")
 
 task_queues = (
     Queue("default"),
-    Queue("transform", Exchange(type="direct"), routing_key="utils.transform"),
-    Queue("populate", Exchange(type="direct"), routing_key="client.populate"),
+    Queue("transform", Exchange("transform", type="direct"), routing_key="transform"),
 )
 
 task_create_missing_queues = True
 
 task_routes = {
-    "backend.celery.tasks.transform.transform": {"queue": "transform"},
-    "backend.celery.tasks.populate": {"queue": "populate"},
+    "backend.celery.tasks.transform.transform": {"queue": "transform", "routing_key": "transform"},
 }
+
+task_acks_late = True
+task_reject_on_worker_lost = True
 
 imports = "backend.celery.tasks"
