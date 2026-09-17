@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter
 from fastapi import Depends, status
 from typing import Annotated
+from uuid import UUID
 from fastapi.exceptions import HTTPException
 from sqlalchemy.orm.exc import DetachedInstanceError
 
@@ -59,10 +60,17 @@ async def create_upload(
 
 
 @router.post(
-    "/{file}/complete",
+    "/{file_id}/complete",
     response_model=IngestionResponse,
 )
-async def complete_upload(request: IngestionComplete, ingestion_service: Ingestion):
+async def complete_upload(
+    file_id: UUID, request: IngestionComplete, ingestion_service: Ingestion
+):
+    if file_id != str(request.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Path parameter {file_id} does not match request body id {request.id}",
+        )
     try:
         response: IngestionResponse = await ingestion_service.complete_upload(request)
 
