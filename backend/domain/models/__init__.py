@@ -1,4 +1,15 @@
-from .transform import TaskReport, ReportRow, TransformResult, ErrorLog
+from backend.domain.ingestion.contracts import (
+    CanonicalRecord,
+    IssueSeverity,
+    MappingDecision,
+    MappingMethod,
+    MappingPlan,
+    QualityIssue,
+    SourceRow,
+    TransformResult,
+    ValidationResult,
+    ValidationStatus,
+)
 from .api import (
     IngestionComplete,
     IngestionCreate,
@@ -9,10 +20,16 @@ from .api import (
 )
 
 __all__ = [
-    "ReportRow",
+    "CanonicalRecord",
     "TransformResult",
-    "ErrorLog",
-    "TaskReport",
+    "SourceRow",
+    "MappingDecision",
+    "MappingMethod",
+    "MappingPlan",
+    "ValidationResult",
+    "ValidationStatus",
+    "QualityIssue",
+    "IssueSeverity",
     "IngestionResponse",
     "IngestionCreate",
     "IngestionComplete",

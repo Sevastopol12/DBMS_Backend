@@ -1,12 +1,11 @@
 import base64
-import json
+import re
 
+import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from hashlib import sha3_256
 from io import BytesIO
-from typing import Any
-from pathlib import Path
 
 
 def to_buffer(hashed_content: str):
@@ -29,9 +28,25 @@ def get_current_timestamp() -> str:
     return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d %H:%M:%S")
 
 
+_SEPARATORS = re.compile(r"[^a-z0-9]+")
+
+
+def normalize_column_name(value: object) -> str:
+    if not value:
+        return ""
+    text = value.strip().lower()
+    # Decompose unicode characters into base + accent
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    # Replace non-alphanumeric with underscores
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_")
+
+
 __all__ = [
     "to_buffer",
     "decode_content",
     "hash_content",
     "get_current_timestamp",
+    "normalize_column_name",
 ]

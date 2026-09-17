@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
@@ -10,7 +11,8 @@ from typing import Any
 
 from backend.database.connection import RDBAsyncConnectionConfig
 from backend.database.errors import DuplicatedContentError
-from backend.database.schema import FileInfo, FileStatus, Base
+from backend.database.schema import FileErrorRecord, FileInfo, FileStatus, Base
+from backend.domain.ingestion.contracts import QualityIssue
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,71 @@ class IngestionRepository:
             )
 
             return result.scalar_one_or_none()
+
+    async def mark_succeeded(self, file_id: UUID, values: dict[str, Any]) -> FileInfo | None:
+        """Transition only a claimed file from PROCESSING to SUCCEED."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id, FileInfo.status == FileStatus.PROCESSING)
+                .values(**values, status=FileStatus.SUCCEED)
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def mark_failed(self, file_id: UUID, values: dict[str, Any]) -> FileInfo | None:
+        """Transition only a claimed file from PROCESSING to ERROR."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id, FileInfo.status == FileStatus.PROCESSING)
+                .values(**values, status=FileStatus.ERROR)
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def requeue_for_retry(self, file_id: UUID) -> FileInfo | None:
+        """Allow a Celery retry to reclaim an infrastructure-failed job."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id, FileInfo.status == FileStatus.ERROR)
+                .values(status=FileStatus.QUEUED, error_code=None, error_message=None)
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def persist_quality_issues(self, issues: list[QualityIssue]) -> int:
+        """Persist issues with their source and transformation lineage."""
+        if not issues:
+            return 0
+        values = [
+            {
+                "file_id": issue.source_file_id,
+                "column": issue.source_column,
+                "normalized_column": issue.normalized_column,
+                "target_field": issue.target_field,
+                "row_number": issue.source_row_number,
+                "raw_value": self._as_text(issue.raw_value),
+                "normalized_value": self._as_text(issue.normalized_value),
+                "error": issue.issue_code,
+                "issue_code": issue.issue_code,
+                "severity": issue.severity.value,
+                "message": issue.message,
+            }
+            for issue in issues
+        ]
+        async with self._session.begin() as session:
+            await session.execute(
+                pg_insert(FileErrorRecord)
+                .values(values)
+                .on_conflict_do_nothing(constraint="ingestion_error_lineage_unique")
+            )
+        return len(values)
+
+    @staticmethod
+    def _as_text(value: Any) -> str | None:
+        return None if value is None else str(value)
 
     async def complete_upload(
         self,

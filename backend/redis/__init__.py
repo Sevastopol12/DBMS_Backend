@@ -3,7 +3,7 @@ from redis import Redis
 from dotenv import load_dotenv
 
 from backend.domain.models import MappingRequest, MappingResponse
-from backend.domain.ingestion.mapping import normalize_column_name
+from backend.domain.utils import normalize_column_name
 
 load_dotenv()
 

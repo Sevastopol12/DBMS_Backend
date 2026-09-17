@@ -7,11 +7,15 @@ from zoneinfo import ZoneInfo
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.repository.production import ReportRepository
 from backend.domain.ingestion.contracts import TransformResult
-from backend.domain.models import FileStatus
+from backend.domain.ingestion.pipeline import TransformationPipeline
 
 
 logger = logging.getLogger(__name__)
 _TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+class InfrastructureProcessingError(RuntimeError):
+    """A retryable storage, parser, or database failure during ingestion."""
 
 
 class FileProcessor:
@@ -25,13 +29,13 @@ class FileProcessor:
         self._production = production_repository
         self._storage = storage
 
-    async def process_file(self, file_id: UUID) -> None:
+    async def process_file(self, file_id: UUID) -> bool:
         claimed = await self._staging.claim(file_id)
         if claimed is None:
             logger.warning(
                 "File %s could not be claimed (not QUEUED or not found)", file_id
             )
-            return
+            return False
 
         object_key, mappings = claimed
         try:
@@ -40,19 +44,24 @@ class FileProcessor:
                 raise ValueError("File has no content")
 
         except ValueError as exc:
-            await self._fail(file_id, "NULL CONTENT", str(exc))
-            return
+            await self._fail(file_id, "NULL_CONTENT", str(exc))
+            return True
 
         except Exception as exc:
             await self._fail(file_id, "STORAGE_UNAVAILABLE", str(exc))
-            return
+            raise InfrastructureProcessingError("Storage download failed") from exc
 
         try:
-            result = await self._apply_transform(file_id, file_bytes, mappings)
+            file_info = await self._staging.get(file_id)
+            if file_info is None:
+                raise ValueError("File metadata is unavailable")
+            result = await self._apply_transform(
+                file_id, file_bytes, file_info.filename, mappings
+            )
         except Exception as exc:
             logger.exception("Unexpected transformation error for file %s", file_id)
-            await self._fail(file_id, "UNEXPECTED_TRANSFORM_ERROR", str(exc))
-            return
+            await self._fail(file_id, "TRANSFORMATION_FAILED", str(exc))
+            raise InfrastructureProcessingError("Transformation failed") from exc
 
         # Persist accepted rows
         try:
@@ -63,32 +72,41 @@ class FileProcessor:
                 source_file_id=file_id,
                 source_size_bytes=size_bytes,
             )
+            await self._staging.persist_quality_issues(result.quality_issues)
         except Exception as exc:
             await self._fail(file_id, "PERSISTENCE_FAILED", str(exc))
-            return
+            raise InfrastructureProcessingError("Persistence failed") from exc
 
-        await self._staging.update(
+        completed = await self._staging.mark_succeeded(
             file_id,
             {
-                "status": FileStatus.SUCCEED,
                 "completed_at": datetime.now(_TZ),
                 "accepted_row_count": result.accepted_row_count,
                 "rejected_row_count": result.rejected_row_count,
             },
         )
+        if completed is None:
+            raise InfrastructureProcessingError("Lost PROCESSING ownership before completion")
+        return True
 
     async def _apply_transform(
-        self, file_id: UUID, file_bytes: bytes, mappings: dict | None
+        self,
+        file_id: UUID,
+        file_bytes: bytes,
+        filename: str,
+        mappings: dict | None,
     ) -> TransformResult:
-        # TODO
-        ...
+        return TransformationPipeline().process(
+            file_bytes=file_bytes,
+            filename=filename,
+            source_file_id=file_id,
+            mappings=mappings,
+        )
 
     async def _fail(self, file_id: UUID, code: str, message: str) -> None:
-        # Use this when an error occured while _apply_transform
-        await self._staging.update(
+        await self._staging.mark_failed(
             file_id,
             {
-                "status": FileStatus.ERROR,
                 "error_code": code,
                 "error_message": message[:2000],
                 "completed_at": datetime.now(_TZ),

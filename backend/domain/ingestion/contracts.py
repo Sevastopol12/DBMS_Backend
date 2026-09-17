@@ -14,6 +14,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, computed_field
 
+from backend.domain.ingestion.versions import MAPPING_VERSION, TRANSFORM_VERSION
+
 
 class MappingMethod(str, Enum):
     EXACT = "EXACT"
@@ -109,18 +111,22 @@ class ValidationResult(BaseModel):
     issue_code: str | None = None
     message: str | None = None
     severity: IssueSeverity | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class QualityIssue(BaseModel):
     source_file_id: UUID
     source_row_number: int = Field(ge=1)
     source_column: str = Field(min_length=1)
+    normalized_column: str | None = None
     target_field: str = Field(min_length=1)
     raw_value: Any | None = None
     normalized_value: Any | None = None
     issue_code: str
     severity: IssueSeverity
     message: str
+    related_row_numbers: list[int] = Field(default_factory=list)
+    related_identifier_values: list[str] = Field(default_factory=list)
 
 
 class TransformResult(BaseModel):
@@ -132,6 +138,9 @@ class TransformResult(BaseModel):
     """
 
     source_file_id: UUID
+    mapping_version: str = MAPPING_VERSION
+    transform_version: str = TRANSFORM_VERSION
+    mapping_plan: MappingPlan | None = None
     accepted_rows: list[CanonicalRecord] = Field(default_factory=list)
     rejected_rows: list[SourceRow] = Field(default_factory=list)
     quality_issues: list[QualityIssue] = Field(default_factory=list)
