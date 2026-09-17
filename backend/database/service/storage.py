@@ -55,8 +55,8 @@ class StorageService:
             return response["Body"].read()
 
         except ClientError as exc:
-            error_code = exc.response["Error"]["Code"]
+            error_code = exc.response.get("Error", {}).get("Code")
             if error_code == "NoSuchKey":
                 raise FileObjectNotFound()
 
-            return None
+            raise

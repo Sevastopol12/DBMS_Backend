@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from backend.database.connection import RDBAsyncConnectionConfig
 from backend.database.schema import SystemReport
-from backend.domain.ingestion.contracts import ReportRow
+from backend.domain.ingestion.contracts import CanonicalRecord
 
 @dataclass
 class BulkInsertResult:
@@ -21,7 +21,7 @@ class ReportRepository:
 
     async def bulk_insert(
         self,
-        rows: Sequence[ReportRow],
+        rows: Sequence[CanonicalRecord],
         source_file_id: UUID,
         source_size_bytes: int | None = None,
     ) -> BulkInsertResult:
@@ -37,7 +37,8 @@ class ReportRepository:
             {
                 "source_file_id": source_file_id,
                 "source_size_bytes": source_size_bytes,
-                **{field: getattr(row, field) for field in row.model_fields},
+                "row_index": str(row.source_row_number),
+                **row.model_dump(exclude={"source_row_number"}),
             }
             for row in rows
         ]
