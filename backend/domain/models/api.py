@@ -21,7 +21,7 @@ class IngestionCreate(BaseModel):
 class IngestionComplete(BaseModel):
     id: UUID
     content_hash: str
-    size_bytes: int | None = None
+    size_bytes: int
     mappings: dict[str, str] | None = None
 
 
