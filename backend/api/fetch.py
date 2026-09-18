@@ -13,10 +13,12 @@ ApplicationCache = Annotated[RedisCache, Depends(get_application_cache)]
 
 
 @router.post(
-    "/mapping/{filename}", status_code=status.HTTP_200_OK, response_model=MappingResponse
+    "/mapping/{filename}",
+    status_code=status.HTTP_200_OK,
+    response_model=MappingResponse,
 )
-async def get_mapping(
+async def get_mapping_hint(
     request: MappingRequest, cache: ApplicationCache
 ) -> MappingResponse:
-    result = cache.get_mapping(request)
+    result = cache.get_mapping_hint(request)
     return result
