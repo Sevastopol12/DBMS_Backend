@@ -1,4 +1,12 @@
-from .transform import TaskReport, ReportRow, TransformResult, ErrorLog
+from .transform import (
+    TaskReport,
+    ReportRow,
+    TransformResult,
+    ErrorLog,
+    SourceDataset,
+    SourceRow,
+    ColumnMap,
+)
 from .api import (
     IngestionComplete,
     IngestionCreate,
@@ -19,4 +27,7 @@ __all__ = [
     "FileStatus",
     "MappingRequest",
     "MappingResponse",
+    "SourceDataset",
+    "SourceRow",
+    "ColumnMap",
 ]

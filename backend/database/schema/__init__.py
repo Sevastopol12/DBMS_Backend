@@ -34,10 +34,6 @@ class SystemReport(Base):
     sdt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
-    phuong_xa: Mapped[str | None] = mapped_column(Text, nullable=True)
-    quan_huyen: Mapped[str | None] = mapped_column(Text, nullable=True)
-    tinh_thanh_pho: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     ngay_kham: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     icd_tha: Mapped[str | None] = mapped_column(Text, nullable=True)

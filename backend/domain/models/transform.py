@@ -1,6 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
-from typing import Any
+from typing import Any, TypeAlias
+
+
+SourceCellValue: TypeAlias = object | None
+SourceRow: TypeAlias = dict[str, SourceCellValue]
 
 
 class TaskReport(BaseModel):
@@ -22,9 +26,6 @@ class ReportRow(BaseModel):
 
     # Address
     dia_chi: str | None = None
-    phuong_xa: str | None = None
-    quan_huyen: str | None = None
-    tinh_thanh_pho: str | None = None
 
     ngay_kham: str | None = None
 
@@ -46,8 +47,24 @@ class ReportRow(BaseModel):
     dieu_tri: str | None = None
 
 
+class ColumnMap(BaseModel):
+    original_name: str
+    normalized_name: str
+    mapping_target: str | None
+
+
+class SourceDataset(BaseModel):
+    """Raw tabular data with rows keyed by the original header names."""
+
+    source_file_id: UUID
+    filename: str
+    headers: list[str]
+    rows: list[SourceRow] = Field(default_factory=list)
+
+
 class TransformResult(BaseModel):
     file_id: UUID
+
     accepted_row_count: int
     rejected_row_count: int
 
