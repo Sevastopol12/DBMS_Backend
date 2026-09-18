@@ -3,8 +3,14 @@ from collections.abc import Iterator
 from redis import Redis
 from dotenv import load_dotenv
 
-from backend.domain.models import MappingRequest, MappingResponse
+from backend.domain.models import (
+    MappingRequest,
+    MappingResponse,
+    HeaderMapValue,
+    CacheSource,
+)
 from backend.domain.ingestion.normalization import normalize_header
+
 
 load_dotenv()
 
@@ -27,9 +33,25 @@ class RedisCache:
             return value
         return None
 
-    def get_cached_mapping(self, source_column: str) -> str | None:
-        """Return the cached target for one source column, if one exists."""
-        return self._decode(self.client.hget(os.getenv("COLUMN_CACHE"), source_column))
+    def get_column_cache(self, normalized_name: str) -> HeaderMapValue | None:
+        """Return the cached target for one normalized source column, if one exists.
+
+        Checks DIRECT_SOURCE first, then DYNAMIC_SOURCE.  Returns ``None``
+        when neither cache has an entry for *normalized_name*.
+        """
+        result = self.client.hget(os.getenv("DIRECT_SOURCE"), normalized_name)
+        if result:
+            return HeaderMapValue(
+                value=self._decode(result), cache_key=CacheSource.DIRECT
+            )
+
+        result = self.client.hget(os.getenv("DYNAMIC_SOURCE"), normalized_name)
+        if result:
+            return HeaderMapValue(
+                value=self._decode(result), cache_key=CacheSource.DYNAMIC
+            )
+
+        return None
 
     def iter_mapping_keys(self) -> Iterator[str]:
         """Iterate source-column fields in the configured Redis hash.
@@ -38,25 +60,22 @@ class RedisCache:
         the correct Redis operation for hash fields.  The fallback keeps this
         small abstraction usable with simple Redis test doubles.
         """
-        cache_name = os.getenv("COLUMN_CACHE")
-        if not cache_name:
-            return
+        for cache_name in [os.getenv("DIRECT_SOURCE"), os.getenv("DYNAMIC_SOURCE")]:
+            if hasattr(self.client, "hscan_iter"):
+                values = self.client.hscan_iter(cache_name)
+            else:
+                values = self.client.hkeys(cache_name)
 
-        if hasattr(self.client, "hscan_iter"):
-            values = self.client.hscan_iter(cache_name)
-        else:
-            values = self.client.hkeys(cache_name)
+            for value in values:
+                decoded = self._decode(
+                    value[0] if isinstance(value, (tuple, list)) else value
+                )
+                if decoded is not None:
+                    yield decoded
 
-        for value in values:
-            decoded = self._decode(
-                value[0] if isinstance(value, (tuple, list)) else value
-            )
-            if decoded is not None:
-                yield decoded
-
-    def get_mapping(self, map_request: MappingRequest) -> MappingResponse:
+    def get_mapping_hint(self, map_request: MappingRequest) -> MappingResponse:
         map_result = {
-            col: self.get_cached_mapping(col) or normalize_header(col)
+            col: self.get_column_cache(col) or normalize_header(col)
             for col in map_request.columns
         }
 
