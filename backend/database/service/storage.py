@@ -43,12 +43,16 @@ class StorageService:
             Key=obj_key,
         )
 
-    def get(self, obj_key: str) -> bytes:
+    def get(self, obj_key: str) -> bytes | None:
         try:
             response = self.connection_config.client.get_object(
                 Bucket=self.connection_config.bucket, Key=obj_key
             )
-            return response["Body"]
+
+            if response["ContentLength"] == 0:
+                return None
+
+            return response["Body"].read()
 
         except ClientError as exc:
             error_code = exc.response["Error"]["Code"]
