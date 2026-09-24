@@ -5,6 +5,7 @@ from fastapi import Depends, status
 from typing import Annotated
 from fastapi.exceptions import HTTPException
 from sqlalchemy.orm.exc import DetachedInstanceError
+from sqlalchemy.exc import IntegrityError
 
 from backend.database import get_staging_repository, get_staging_storage
 from backend.database.service import (
@@ -70,6 +71,14 @@ async def complete_upload(request: IngestionComplete, ingestion_service: Ingesti
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Duplicated file"
         )
+
+    except IntegrityError as exc:
+        if "ingestion_files_content_hash_unique" in str(exc.orig):
+            raise HTTPException(
+                status_code=409,
+                detail="A file with this identical content already exists in the system.",
+            ) from exc
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
