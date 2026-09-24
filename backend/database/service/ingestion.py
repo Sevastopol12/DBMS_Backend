@@ -40,6 +40,7 @@ class IngestionService:
             object_key=object_key,
             content_type=file.content_type,
             status=FileStatus.CREATED,
+            facility_id=uuid4(),
             created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
         )
 
