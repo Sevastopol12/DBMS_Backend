@@ -1,5 +1,3 @@
-"""The domain-level reader abstraction."""
-
 from abc import ABC, abstractmethod
 from uuid import UUID
 
@@ -14,3 +12,6 @@ class SourceDatasetReader(ABC):
         self, file_bytes: bytes, filename: str, source_file_id: UUID
     ) -> SourceDataset:
         """Return the raw source dataset represented by ``file_bytes``."""
+
+
+__all__ = ["SourceDatasetReader"]

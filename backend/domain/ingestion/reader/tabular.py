@@ -185,3 +185,6 @@ def read_source_dataset(
     """Convenience entry point for callers that do not need a reader instance."""
 
     return TabularSourceReader().read(file_bytes, filename, source_file_id)
+
+
+__all__ = ["TabularSourceReader", "read_source_dataset"]
