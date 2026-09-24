@@ -142,7 +142,6 @@ class MappingLookupGateway:
                 self.db_snapshot = snapshot
                 self.db_retry_at = 0.0
                 future.set_result(snapshot)
-            logger.info("mapping DB snapshot loaded rows=%d", len(rows_list))
             return self._publish_source(snapshot)
         except asyncio.CancelledError:
             self._fail_db_load(future, asyncio.CancelledError())
