@@ -18,8 +18,6 @@ from backend.domain.models import IngestionCreate, IngestionResponse, IngestionC
 from backend.celery import transform
 
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 IngestionRepositoryService = Annotated[

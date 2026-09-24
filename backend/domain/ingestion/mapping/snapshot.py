@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Iterator, Protocol
 
 from backend.domain.models import CacheSource, HeaderMapValue
-
-
-logger = logging.getLogger(__name__)
 
 
 class MappingSourceKind(str, Enum):
@@ -24,11 +20,9 @@ class MappingSourceUnavailable(RuntimeError):
 class MappingSource(Protocol):
     kind: MappingSourceKind
 
-    def get_column_cache(self, name: str) -> HeaderMapValue | None:
-        ...
+    def get_column_cache(self, name: str) -> HeaderMapValue | None: ...
 
-    def iter_mapping_keys(self) -> Iterator[str]:
-        ...
+    def iter_mapping_keys(self) -> Iterator[str]: ...
 
 
 @dataclass
@@ -46,7 +40,9 @@ class MappingSnapshot:
         if name in self.direct:
             return HeaderMapValue(value=self.direct[name], cache_key=CacheSource.DIRECT)
         if name in self.dynamic:
-            return HeaderMapValue(value=self.dynamic[name], cache_key=CacheSource.DYNAMIC)
+            return HeaderMapValue(
+                value=self.dynamic[name], cache_key=CacheSource.DYNAMIC
+            )
         return None
 
     def iter_mapping_keys(self) -> Iterator[str]:
@@ -79,7 +75,11 @@ class MappingSnapshot:
             alias = getattr(row, "normalized_alias", "")
             tier = getattr(row, "tier", "")
             target = getattr(row, "target", "")
-            if not isinstance(alias, str) or not isinstance(tier, str) or not isinstance(target, str):
+            if (
+                not isinstance(alias, str)
+                or not isinstance(tier, str)
+                or not isinstance(target, str)
+            ):
                 continue
             alias = alias.strip()
             tier = tier.strip().upper()
@@ -93,11 +93,7 @@ class MappingSnapshot:
             mappings[tier] = {}
             for alias, targets in aliases.items():
                 if len(targets) > 1:
-                    logger.warning(
-                        "Dropping conflicting mapping alias %r for tier %s",
-                        alias,
-                        tier,
-                    )
+
                     continue
                 mappings[tier][alias] = next(iter(targets))
         return cls(

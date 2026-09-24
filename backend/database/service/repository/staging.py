@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -14,8 +13,6 @@ from backend.database.errors import (
     is_duplicate_content_integrity_error,
 )
 from backend.database.schema import Base, FileInfo, FileStatus
-
-logger = logging.getLogger(__name__)
 
 
 class IngestionRepository:
