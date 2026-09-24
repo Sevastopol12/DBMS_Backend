@@ -1,4 +1,11 @@
 from .staging import IngestionRepository
-from .production import ReportRepository
+from .production import BulkInsertResult, ReportRepository
+from .mapping import HeaderMappingRepository, HeaderMappingRow
 
-__all__ = ["IngestionRepository", "ReportRepository"]
+__all__ = [
+    "BulkInsertResult",
+    "HeaderMappingRepository",
+    "HeaderMappingRow",
+    "IngestionRepository",
+    "ReportRepository",
+]

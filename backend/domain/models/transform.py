@@ -1,22 +1,19 @@
-from pydantic import BaseModel, Field
+from datetime import date, datetime
+from enum import Enum
+from pydantic import BaseModel, Field, field_validator
+import uuid
 from uuid import UUID
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 
 SourceCellValue: TypeAlias = object | None
 SourceRow: TypeAlias = dict[str, SourceCellValue]
 
 
-class TaskReport(BaseModel):
-    report_rows: list[dict[str, Any]]
-    logs: list[str]
-    accepted_row: int
-    rejected_row: int
-
-
 class ReportRow(BaseModel):
     ma_bhyt: str | None = None
     cccd: str | None = None
+    facility_id: uuid.UUID | None = None
 
     # Demographic
     ho_ten: str | None = None
@@ -27,7 +24,7 @@ class ReportRow(BaseModel):
     # Address
     dia_chi: str | None = None
 
-    ngay_kham: str | None = None
+    ngay_kham: datetime | None = None
 
     # Clinical metrics
 
@@ -35,6 +32,7 @@ class ReportRow(BaseModel):
     icd_tha: str | None = None
     # Icd diabetes
     icd_dtd: str | None = None
+    chan_doan_di_kem: str | None = None
     # Diastolic blood pressure
     huyet_ap_tam_truong: str | None = None
     # Systolic blood pressure
@@ -46,11 +44,41 @@ class ReportRow(BaseModel):
     ghi_chu: str | None = None
     dieu_tri: str | None = None
 
+    @field_validator("ngay_kham", mode="before")
+    @classmethod
+    def parse_visit_date(cls, value: object) -> datetime | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time())
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            for parser in (datetime.fromisoformat,):
+                try:
+                    return parser(text)
+                except ValueError:
+                    continue
+        raise ValueError("ngay_kham must be an ISO date or datetime")
+
 
 class ColumnMap(BaseModel):
     original_name: str
     normalized_name: str
     mapping_target: str | None
+
+
+class CacheSource(str, Enum):
+    DIRECT = "DIRECT"
+    DYNAMIC = "DYNAMIC"
+
+
+class HeaderMapValue(BaseModel):
+    value: str | None
+    cache_key: CacheSource
 
 
 class SourceDataset(BaseModel):
@@ -62,15 +90,12 @@ class SourceDataset(BaseModel):
     rows: list[SourceRow] = Field(default_factory=list)
 
 
-class TransformResult(BaseModel):
-    file_id: UUID
-
-    accepted_row_count: int
-    rejected_row_count: int
-
-
-class ErrorLog(BaseModel):
-    row_number: int
-    status: str
-    normalized: dict[str, Any]
-    issues: dict[str, Any]
+__all__ = [
+    "SourceRow",
+    "ReportRow",
+    "ColumnMap",
+    "CacheSource",
+    "HeaderMapValue",
+    "SourceDataset",
+    "SourceCellValue",
+]

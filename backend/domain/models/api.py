@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID
 from enum import Enum
+from typing import Any
 
 
 class FileStatus(str, Enum):
@@ -9,6 +10,7 @@ class FileStatus(str, Enum):
     QUEUED: str = "QUEUED"
     PROCESSING: str = "PROCESSING"
     SUCCEED: str = "SUCCEED"
+    REJECTED: str = "REJECTED"
     ERROR: str = "ERROR"
 
 
@@ -22,7 +24,7 @@ class IngestionComplete(BaseModel):
     id: UUID
     content_hash: str
     size_bytes: int | None = None
-    mappings: dict[str, str] | None = None
+    mappings: dict[str, Any] | None = None
 
 
 class IngestionResponse(BaseModel):
@@ -49,3 +51,13 @@ class MappingRequest(BaseModel):
 class MappingResponse(BaseModel):
     filename: str
     mapping: dict[str, str | None] | None = None
+
+
+__all__ = [
+    "FileStatus",
+    "IngestionCreate",
+    "IngestionComplete",
+    "IngestionResponse",
+    "MappingRequest",
+    "MappingResponse",
+]

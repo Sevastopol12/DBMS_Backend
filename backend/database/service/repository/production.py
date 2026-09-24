@@ -25,6 +25,7 @@ class ReportRepository:
         self,
         rows: Sequence[ReportRow],
         source_file_id: UUID,
+        facility_id: UUID,
         source_size_bytes: int | None = None,
         source_row_numbers: Sequence[int] | None = None,
     ) -> BulkInsertResult:
@@ -54,6 +55,7 @@ class ReportRepository:
                 "source_size_bytes": source_size_bytes,
                 "source_row_number": row_numbers[index],
                 **{field: getattr(row, field) for field in ReportRow.model_fields},
+                "facility_id": facility_id,
             }
             for index, row in enumerate(rows)
         ]

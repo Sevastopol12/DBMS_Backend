@@ -1,11 +1,10 @@
 from .transform import (
-    TaskReport,
     ReportRow,
-    TransformResult,
-    ErrorLog,
     SourceDataset,
     SourceRow,
     ColumnMap,
+    HeaderMapValue,
+    CacheSource,
 )
 from .api import (
     IngestionComplete,
@@ -15,12 +14,25 @@ from .api import (
     MappingRequest,
     MappingResponse,
 )
+from .contracts import (
+    FieldPlan,
+    FieldQuality,
+    FileAcceptancePolicy,
+    FileDecision,
+    MappingOperation,
+    MappingPlan,
+    ProcessingStage,
+    QualityReport,
+    RowDisposition,
+    RowIssueRecord,
+    RuleMode,
+    TransformResult,
+    ValidationPolicy,
+    safe_issue_sample,
+)
 
 __all__ = [
     "ReportRow",
-    "TransformResult",
-    "ErrorLog",
-    "TaskReport",
     "IngestionResponse",
     "IngestionCreate",
     "IngestionComplete",
@@ -30,4 +42,20 @@ __all__ = [
     "SourceDataset",
     "SourceRow",
     "ColumnMap",
+    "HeaderMapValue",
+    "CacheSource",
+    "FieldPlan",
+    "FieldQuality",
+    "FileAcceptancePolicy",
+    "FileDecision",
+    "MappingOperation",
+    "MappingPlan",
+    "ProcessingStage",
+    "QualityReport",
+    "RowDisposition",
+    "RowIssueRecord",
+    "RuleMode",
+    "TransformResult",
+    "ValidationPolicy",
+    "safe_issue_sample",
 ]
