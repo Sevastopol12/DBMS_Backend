@@ -1,5 +1,7 @@
+import logging
 import os
 from collections.abc import Iterator
+import redis
 from redis import Redis
 from dotenv import load_dotenv
 
@@ -14,10 +16,13 @@ from backend.domain.ingestion.normalization import normalize_header
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 
 class RedisCache:
     def __init__(self, cache_client: Redis):
         self.client = cache_client
+        self._unavailable: bool = False
 
     @staticmethod
     def _decode(value: object) -> str | None:
@@ -39,13 +44,31 @@ class RedisCache:
         Checks DIRECT_SOURCE first, then DYNAMIC_SOURCE.  Returns ``None``
         when neither cache has an entry for *normalized_name*.
         """
-        result = self.client.hget(os.getenv("DIRECT_SOURCE"), normalized_name)
+        normalized_name = normalized_name.lower()
+
+        if self._unavailable:
+            return None
+
+        try:
+            result = self.client.hget(os.getenv("DIRECT_SOURCE"), normalized_name)
+        except redis.exceptions.RedisError as exc:
+            self._unavailable = True
+            logger.warning("Redis cache unavailable; falling back to database: %s", exc)
+            return None
         if result:
             return HeaderMapValue(
                 value=self._decode(result), cache_key=CacheSource.DIRECT
             )
 
-        result = self.client.hget(os.getenv("DYNAMIC_SOURCE"), normalized_name)
+        if self._unavailable:
+            return None
+
+        try:
+            result = self.client.hget(os.getenv("DYNAMIC_SOURCE"), normalized_name)
+        except redis.exceptions.RedisError as exc:
+            self._unavailable = True
+            logger.warning("Redis cache unavailable; falling back to database: %s", exc)
+            return None
         if result:
             return HeaderMapValue(
                 value=self._decode(result), cache_key=CacheSource.DYNAMIC
@@ -61,21 +84,33 @@ class RedisCache:
         small abstraction usable with simple Redis test doubles.
         """
         for cache_name in [os.getenv("DIRECT_SOURCE"), os.getenv("DYNAMIC_SOURCE")]:
-            if hasattr(self.client, "hscan_iter"):
-                values = self.client.hscan_iter(cache_name)
-            else:
-                values = self.client.hkeys(cache_name)
+            if self._unavailable:
+                return
 
-            for value in values:
-                decoded = self._decode(
-                    value[0] if isinstance(value, (tuple, list)) else value
-                )
-                if decoded is not None:
-                    yield decoded
+            try:
+                if hasattr(self.client, "hscan_iter"):
+                    values = self.client.hscan_iter(cache_name)
+                else:
+                    values = self.client.hkeys(cache_name)
+
+                for value in values:
+                    decoded = self._decode(
+                        value[0] if isinstance(value, (tuple, list)) else value
+                    )
+                    if decoded is not None:
+                        yield decoded
+            except redis.exceptions.RedisError as exc:
+                self._unavailable = True
+                logger.warning("Redis cache unavailable; falling back to database: %s", exc)
+                return
 
     def get_mapping_hint(self, map_request: MappingRequest) -> MappingResponse:
         map_result = {
-            col: self.get_column_cache(col) or normalize_header(col)
+            col: (
+                cached.value
+                if (cached := self.get_column_cache(normalize_header(col))) is not None
+                else normalize_header(col)
+            )
             for col in map_request.columns
         }
 
