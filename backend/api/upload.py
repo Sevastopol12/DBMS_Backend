@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import APIRouter
 from fastapi import Depends, status
 from typing import Annotated
