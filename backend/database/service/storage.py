@@ -6,7 +6,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from backend.database.connection import StorageAsyncConnectionConfig
-from backend.database.errors import FileObjectNotFound
+from backend.database.errors import FileObjectNotFound, StorageUnavailable
 
 
 class StorageService:
@@ -43,16 +43,19 @@ class StorageService:
             Key=obj_key,
         )
 
-    def get(self, obj_key: str) -> bytes:
+    def get(self, obj_key: str) -> bytes | None:
         try:
             response = self.connection_config.client.get_object(
                 Bucket=self.connection_config.bucket, Key=obj_key
             )
-            return response["Body"]
+
+            if response["ContentLength"] == 0:
+                return None
+
+            return response["Body"].read()
 
         except ClientError as exc:
             error_code = exc.response["Error"]["Code"]
             if error_code == "NoSuchKey":
                 raise FileObjectNotFound()
-
-            return None
+            raise StorageUnavailable() from exc
