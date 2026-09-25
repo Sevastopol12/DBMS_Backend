@@ -1,9 +1,10 @@
 import uvicorn
 from fastapi import FastAPI
-from backend.api import upload_router, fetch_router
+from backend.api.routes import fetch_router, upload_router
+from backend.api.resources import api_lifespan
 
 
-app = FastAPI()
+app = FastAPI(lifespan=api_lifespan)
 
 # Upload
 app.include_router(upload_router, prefix="/upload/v1")

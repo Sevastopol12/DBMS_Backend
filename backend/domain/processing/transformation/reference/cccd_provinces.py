@@ -1,0 +1,77 @@
+"""Original CCCD province-code reference data.
+
+The 3-digit codes from the original 63-province list in Thong tu
+07/2016/TT-BCA must be supplied from the official source before this
+reference can enforce province membership.
+"""
+
+PROVINCE_CODES: frozenset[str] = frozenset(
+    [
+        "001",
+        "002",
+        "004",
+        "006",
+        "008",
+        "010",
+        "011",
+        "012",
+        "014",
+        "015",
+        "017",
+        "019",
+        "020",
+        "022",
+        "024",
+        "025",
+        "026",
+        "027",
+        "030",
+        "031",
+        "033",
+        "034",
+        "035",
+        "036",
+        "037",
+        "038",
+        "040",
+        "042",
+        "044",
+        "045",
+        "046",
+        "048",
+        "049",
+        "051",
+        "052",
+        "054",
+        "056",
+        "058",
+        "060",
+        "062",
+        "064",
+        "066",
+        "067",
+        "068",
+        "070",
+        "072",
+        "074",
+        "075",
+        "077",
+        "079",
+        "080",
+        "082",
+        "083",
+        "084",
+        "086",
+        "087",
+        "089",
+        "091",
+        "092",
+        "093",
+        "094",
+        "095",
+        "096",
+    ]
+)
+
+
+__all__ = ["PROVINCE_CODES"]
