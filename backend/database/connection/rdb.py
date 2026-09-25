@@ -13,7 +13,6 @@ from sqlalchemy import text
 
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 
