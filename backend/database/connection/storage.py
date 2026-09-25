@@ -15,6 +15,10 @@ from dataclasses import dataclass, field
 
 from backend.database.errors import StorageUnavailable
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +65,7 @@ def get_storage_config(
 
 def storage_settings_from_env() -> dict:
     return {
-        "max_pool_connections": int(
-            os.getenv("S3_MAX_POOL_CONNECTIONS", "20")
-        ),
+        "max_pool_connections": int(os.getenv("S3_MAX_POOL_CONNECTIONS", "20")),
         "connect_timeout": float(os.getenv("S3_CONNECT_TIMEOUT", "5")),
         "read_timeout": float(os.getenv("S3_READ_TIMEOUT", "60")),
     }
