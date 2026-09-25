@@ -2,12 +2,10 @@ from uuid import UUID
 from asyncio import run
 
 from ..app import celery
+from ..resources import task_resources
 from backend.domain.processor import FileProcessor
-from backend.database import (
-    get_staging_repository,
-    get_production_repository,
-    get_staging_storage,
-)
+from backend.database.service import IngestionRepository, StorageService
+from backend.database.service.repository.production import ReportRepository
 from backend.mapping_gateway import get_mapping_gateway
 
 
@@ -17,10 +15,11 @@ def transform(task_id: UUID):
 
 
 async def _transform(task_id: UUID):
-    processor = FileProcessor(
-        staging_repository=get_staging_repository(),
-        production_repository=get_production_repository(),
-        storage=get_staging_storage(),
-        mapping_provider=get_mapping_gateway(),
-    )
-    await processor.process_file(task_id)
+    async with task_resources() as res:
+        processor = FileProcessor(
+            staging_repository=IngestionRepository(res.staging),
+            production_repository=ReportRepository(res.production),
+            storage=StorageService(res.storage),
+            mapping_provider=get_mapping_gateway(),
+        )
+        await processor.process_file(task_id)

@@ -2,14 +2,15 @@ from fastapi import APIRouter, Depends, status
 from typing import Annotated
 
 from backend.domain.models import MappingRequest, MappingResponse
-from backend.redis import get_application_cache, RedisCache
+from backend.api.dependencies import get_redis_cache
+from backend.redis import RedisCache
 from dotenv import load_dotenv
 
 load_dotenv()
 
 router = APIRouter()
 
-ApplicationCache = Annotated[RedisCache, Depends(get_application_cache)]
+ApplicationCache = Annotated[RedisCache, Depends(get_redis_cache)]
 
 
 @router.post(
