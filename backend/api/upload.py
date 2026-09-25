@@ -5,12 +5,12 @@ from fastapi.exceptions import HTTPException
 from sqlalchemy.orm.exc import DetachedInstanceError
 from sqlalchemy.exc import IntegrityError
 
-from backend.database import get_staging_repository, get_staging_storage
 from backend.database.service import (
     IngestionRepository,
     StorageService,
     IngestionService,
 )
+from backend.api.dependencies import get_ingestion_repository, get_storage_service
 from backend.database.errors import DuplicatedContentError
 from backend.domain.models import IngestionCreate, IngestionResponse, IngestionComplete
 from backend.celery import transform
@@ -19,9 +19,9 @@ from backend.celery import transform
 router = APIRouter()
 
 IngestionRepositoryService = Annotated[
-    IngestionRepository, Depends(get_staging_repository)
+    IngestionRepository, Depends(get_ingestion_repository)
 ]
-FileStorageService = Annotated[StorageService, Depends(get_staging_storage)]
+FileStorageService = Annotated[StorageService, Depends(get_storage_service)]
 
 
 def get_ingestion_service(
