@@ -1,0 +1,63 @@
+from .models import (
+    CacheSource,
+    ColumnMap,
+    FieldPlan,
+    FieldQuality,
+    FileStatus,
+    FileAcceptancePolicy,
+    FileDecision,
+    MappingOperation,
+    MappingPlan,
+    ProcessingStage,
+    QualityReport,
+    ReportRow,
+    TransformResult,
+    HeaderMapValue,
+    SourceDataset,
+    SourceRow,
+    SourceCellValue,
+    safe_issue_sample,
+)
+
+
+from backend.database.canonical import (
+    ACCEPTANCE_FIELDS,
+    CANONICAL_FIELDS,
+    CANONICAL_FIELD_NAMES,
+    CANONICAL_FIELD_SET,
+    REQUIRED_CANONICAL_FIELDS,
+)
+from .mapping import MappingCatalog, MappingEntry, ResolvedHeader
+from .transformation.validation import ValidationResult, ValidationState, validate_field
+
+__all__ = [
+    "CANONICAL_FIELDS",
+    "CANONICAL_FIELD_NAMES",
+    "CANONICAL_FIELD_SET",
+    "ACCEPTANCE_FIELDS",
+    "REQUIRED_CANONICAL_FIELDS",
+    "FieldPlan",
+    "FieldQuality",
+    "FileStatus",
+    "FileAcceptancePolicy",
+    "FileDecision",
+    "MappingOperation",
+    "MappingPlan",
+    "ProcessingStage",
+    "QualityReport",
+    "ReportRow",
+    "ColumnMap",
+    "CacheSource",
+    "HeaderMapValue",
+    "SourceDataset",
+    "SourceRow",
+    "SourceCellValue",
+    "TransformResult",
+    "safe_issue_sample",
+    "MappingCatalog",
+    "MappingEntry",
+    "ResolvedHeader",
+    "ValidationResult",
+    "ValidationState",
+    "validate_field",
+]
