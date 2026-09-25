@@ -1,8 +1,8 @@
 from fastapi import Depends, Request
 
 from backend.api.resources import ApiResources
-from backend.database.service import IngestionRepository, StorageService
-from backend.redis import RedisCache
+from backend.database.service import StorageService, IngestionRepository
+from backend.domain.processing.mapping.legacy.legacy_cache import RedisCache
 
 
 def get_resources(request: Request) -> ApiResources:
