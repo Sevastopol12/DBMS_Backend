@@ -1,9 +1,9 @@
-from fastapi import APIRouter
-from fastapi import Depends, status
 from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
-from sqlalchemy.orm.exc import DetachedInstanceError
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from backend.api.dependencies import get_ingestion_repository, get_storage_service
 from backend.api.dto import IngestionComplete, IngestionCreate, IngestionResponse
@@ -11,7 +11,6 @@ from backend.api.ingestion_service import IngestionService
 from backend.database.errors import DuplicatedContentError
 from backend.database.service import IngestionRepository, StorageService
 from backend.worker.tasks.transform import transform
-
 
 router = APIRouter()
 

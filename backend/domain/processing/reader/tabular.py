@@ -12,7 +12,6 @@ from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
 from ..models import SourceDataset, SourceRow
-
 from .base import SourceDatasetReader
 from .errors import (
     CorruptFileError,

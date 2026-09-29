@@ -1,5 +1,3 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from asyncio import to_thread
 from typing import Any
 
@@ -7,6 +5,7 @@ from botocore.exceptions import ClientError
 
 from backend.database.connection import StorageAsyncConnectionConfig
 from backend.database.errors import FileObjectNotFound, StorageUnavailable
+from backend.timezone import now_vietnam
 
 
 class StorageService:
@@ -14,7 +13,7 @@ class StorageService:
         self.connection_config = config
 
     def get_today_folder(self) -> str:
-        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
+        return now_vietnam().strftime("%Y-%m-%d")
 
     def get_presigned_url(self, object_key: str, content_type: str) -> str:
         return self.connection_config.client.generate_presigned_url(

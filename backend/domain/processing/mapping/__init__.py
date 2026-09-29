@@ -6,13 +6,12 @@ from .matching.catalog import (
 )
 from .matching.headers import match_attempt, match_headers
 from .source.snapshot import (
+    MappingSnapshot,
     MappingSource,
     MappingSourceKind,
     MappingSourceUnavailable,
-    MappingSnapshot,
     UnavailableMappingSource,
 )
-
 
 __all__ = [
     "MappingCatalog",

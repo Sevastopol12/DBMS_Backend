@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
-import re
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..normalization import normalize_text
 from ...models import RuleMode, ValidationPolicy
+from ..normalization import normalize_text
 
 
 class ValidationState(str, Enum):

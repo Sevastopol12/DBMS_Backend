@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from .catalog import MappingCatalog, MatchAttempt, ResolvedHeader
 
-
 FUZZY_MAPPING_THRESHOLD = 88.0
 
 

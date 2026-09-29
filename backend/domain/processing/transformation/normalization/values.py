@@ -6,10 +6,12 @@ original value when reporting quality outcomes.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-import re
 from typing import Any
+
+from backend.timezone import VIETNAM_TZ, ensure_vietnam_aware
 
 from .lexical import clean_optional_text
 
@@ -30,6 +32,8 @@ def normalize_identifier(value: Any) -> str | None:
 def normalize_date(value: Any) -> str | None:
     """Return an ISO date from common spreadsheet date representations."""
     if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(VIETNAM_TZ)
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
@@ -76,25 +80,27 @@ def normalize_datetime(value: Any) -> datetime | None:
     """Return a datetime from supported spreadsheet and ISO representations."""
     try:
         if isinstance(value, datetime):
-            return value
+            return ensure_vietnam_aware(value)
         if isinstance(value, date):
-            return datetime.combine(value, datetime.min.time())
+            return datetime.combine(value, datetime.min.time(), tzinfo=VIETNAM_TZ)
         if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
             number = float(value)
             if number.is_integer() and 10_000_000 <= number <= 99_999_999:
                 try:
-                    return datetime.strptime(str(int(number)), "%Y%m%d")
+                    return datetime.strptime(str(int(number)), "%Y%m%d").replace(
+                        tzinfo=VIETNAM_TZ
+                    )
                 except ValueError:
                     return None
             if 1 <= number <= 60_000:
-                return datetime(1899, 12, 30) + timedelta(days=number)
+                return (datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(days=number))
 
         text = normalize_text(value)
         if text is None:
             return None
         if re.fullmatch(r"\d{8}", text):
             try:
-                return datetime.strptime(text, "%Y%m%d")
+                return datetime.strptime(text, "%Y%m%d").replace(tzinfo=VIETNAM_TZ)
             except ValueError:
                 return None
         for parser in (
@@ -110,7 +116,7 @@ def normalize_datetime(value: Any) -> datetime | None:
             lambda candidate: datetime.strptime(candidate, "%Y/%m/%d %H:%M:%S"),
         ):
             try:
-                return parser(text)
+                return ensure_vietnam_aware(parser(text))
             except ValueError:
                 continue
     except Exception:

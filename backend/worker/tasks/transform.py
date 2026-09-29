@@ -1,16 +1,17 @@
-from uuid import UUID
 from asyncio import run
+from uuid import UUID
 
-from ..app import celery
-from ..resources import task_resources
-from ..file_processor import FileProcessor
+from backend.database import load_header_mappings
 from backend.database.service import (
     IngestionRepository,
     ReportRepository,
     StorageService,
 )
 from backend.domain.processing.mapping.source.mapping_gateway import get_mapping_gateway
-from backend.database import load_header_mappings
+
+from ..app import celery
+from ..file_processor import FileProcessor
+from ..resources import task_resources
 
 
 @celery.task(name="backend.worker.tasks.transform.transform")

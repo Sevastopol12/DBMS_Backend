@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +14,7 @@ from backend.database.errors import (
 )
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
+from backend.timezone import now_vietnam
 
 
 class IngestionRepository:
@@ -64,7 +64,7 @@ class IngestionRepository:
                 "size_bytes": size_bytes,
                 "status": FileStatus.QUEUED,
                 "mappings": mappings,
-                "uploaded_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                "uploaded_at": now_vietnam(),
                 "error_code": None,
                 "error_message": None,
             }
@@ -89,7 +89,7 @@ class IngestionRepository:
         processing_timeout: timedelta = timedelta(minutes=15),
     ) -> tuple[str, dict | None] | None:
         """Atomically claim queued work or reclaim stale PROCESSING work."""
-        now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        now = now_vietnam()
         stale_before = now - processing_timeout
         async with self._session.begin() as session:
             result = await session.execute(
@@ -121,7 +121,7 @@ class IngestionRepository:
     async def recover_processing(
         self, *, processing_timeout: timedelta = timedelta(minutes=15)
     ) -> list[UUID]:
-        now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        now = now_vietnam()
         stale_before = now - processing_timeout
         async with self._session.begin() as session:
             result = await session.execute(
