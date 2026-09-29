@@ -1,13 +1,14 @@
 from datetime import datetime
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import DateTime, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
 from backend.domain.processing.models import FileStatus
+from backend.timezone import now_vietnam
 
 
 class FileInfo(Base):
@@ -37,7 +38,7 @@ class FileInfo(Base):
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        default=now_vietnam,
     )
     uploaded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

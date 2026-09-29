@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, status
 from typing import Annotated
 
+from fastapi import APIRouter, Depends, status
+
+from backend.api.dependencies import get_mapping_cache
 from backend.domain.processing.mapping.legacy.legacy_cache import (
+    MappingCache,
     MappingRequest,
     MappingResponse,
-    RedisCache,
 )
-from backend.api.dependencies import get_redis_cache
+
 router = APIRouter()
 
-ApplicationCache = Annotated[RedisCache, Depends(get_redis_cache)]
+ApplicationCache = Annotated[MappingCache, Depends(get_mapping_cache)]
 
 
 @router.post(

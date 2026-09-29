@@ -1,29 +1,25 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from backend.database.errors import FileObjectNotFound, StorageUnavailable
 from backend.database.service import (
-    ReportRepository,
     IngestionRepository,
+    ReportRepository,
     StorageService,
-)
-from backend.domain.processing.models import (
-    FileAcceptancePolicy,
-    FileDecision,
-    ProcessingStage,
-    QualityReport,
 )
 from backend.domain.processing.engine import TransformPipeline
 from backend.domain.processing.mapping import MappingSourceUnavailable
+from backend.domain.processing.models import (
+    FileAcceptancePolicy,
+    FileDecision,
+    FileStatus,
+    ProcessingStage,
+    QualityReport,
+)
 from backend.domain.processing.reader.errors import ReaderError
-from backend.domain.processing.models import FileStatus
-
-
-_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+from backend.timezone import now_vietnam
 
 
 class FileProcessor:
@@ -109,12 +105,13 @@ class FileProcessor:
                     "mapping_source": mapping_source_value,
                 }
             )
+            result.quality_report.facility_id = file_info.facility_id
             report_json = result.quality_report.model_dump(mode="json")
             await self._staging.update(
                 file_id,
                 {
                     "status": FileStatus.REJECTED,
-                    "completed_at": datetime.now(_TZ),
+                    "completed_at": now_vietnam(),
                     "accepted_row_count": 0,
                     "rejected_row_count": result.quality_report.total_rows,
                     "quality_report": report_json,
@@ -146,13 +143,14 @@ class FileProcessor:
                 "mapping_source": mapping_source_value,
             }
         )
+        result.quality_report.facility_id = file_info.facility_id
         report_json = result.quality_report.model_dump(mode="json")
 
         await self._staging.update(
             file_id,
             {
                 "status": FileStatus.SUCCEED,
-                "completed_at": datetime.now(_TZ),
+                "completed_at": now_vietnam(),
                 "accepted_row_count": result.accepted_row_count,
                 "rejected_row_count": result.rejected_row_count,
                 "quality_report": report_json,
@@ -183,7 +181,7 @@ class FileProcessor:
             file_id,
             {
                 "status": FileStatus.ERROR,
-                "completed_at": datetime.now(_TZ),
+                "completed_at": now_vietnam(),
                 "error_code": error_code,
                 "error_message": error_code,
             },
@@ -208,7 +206,7 @@ class FileProcessor:
             file_id,
             {
                 "status": FileStatus.REJECTED,
-                "completed_at": datetime.now(_TZ),
+                "completed_at": now_vietnam(),
                 "accepted_row_count": 0,
                 "rejected_row_count": 0,
                 "quality_report": report.model_dump(mode="json"),

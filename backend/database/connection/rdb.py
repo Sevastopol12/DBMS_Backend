@@ -1,17 +1,15 @@
 import asyncio
 import os
-
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
-    AsyncSession,
     AsyncEngine,
+    AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy import text
-
-from dotenv import load_dotenv
 
 load_dotenv()
 

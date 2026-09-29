@@ -1,7 +1,27 @@
+from __future__ import annotations
+
 import os
+import sys
+from typing import TYPE_CHECKING
 
 from .connection import create_connection
-from .mapping.repository import HeaderMappingRepository, HeaderMappingRow
+
+if TYPE_CHECKING:
+    from .service.mapping.repository import HeaderMappingRepository, HeaderMappingRow
+
+
+def __getattr__(name: str):
+    if name in {"HeaderMappingRepository", "HeaderMappingRow"}:
+        from .service.mapping.repository import (
+            HeaderMappingRepository,
+            HeaderMappingRow,
+        )
+
+        return {
+            "HeaderMappingRepository": HeaderMappingRepository,
+            "HeaderMappingRow": HeaderMappingRow,
+        }[name]
+    raise AttributeError(name)
 
 
 async def load_header_mappings() -> tuple[HeaderMappingRow, ...]:
@@ -10,7 +30,8 @@ async def load_header_mappings() -> tuple[HeaderMappingRow, ...]:
 
     config = create_connection("mapping")
     try:
-        return await HeaderMappingRepository(config).load_active()
+        repository_type = getattr(sys.modules[__name__], "HeaderMappingRepository")
+        return await repository_type(config).load_active()
     finally:
         await config.async_engine.dispose()
 

@@ -2,7 +2,8 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import BigInteger, DateTime, Integer, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
@@ -30,26 +31,31 @@ class SystemReport(Base):
         PG_UUID(as_uuid=True), nullable=True
     )
 
-    ho_ten: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ho_ten: Mapped[str] = mapped_column(Text, nullable=False)
     gioi_tinh: Mapped[str | None] = mapped_column(Text, nullable=True)
-    nam_sinh: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sdt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nam_sinh: Mapped[str] = mapped_column(Text, nullable=False)
+    sdt: Mapped[str | None] = mapped_column(Text, nullable=False)
 
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ngay_kham: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ngay_kham: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
-    icd_tha: Mapped[str | None] = mapped_column(Text, nullable=True)
-    icd_dtd: Mapped[str | None] = mapped_column(Text, nullable=True)
-    chan_doan_di_kem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icd_tha: Mapped[str] = mapped_column(Text, nullable=False)
+    icd_dtd: Mapped[str] = mapped_column(Text, nullable=False)
+    chan_doan_di_kem: Mapped[str] = mapped_column(Text, nullable=False)
 
-    huyet_ap_tam_truong: Mapped[str | None] = mapped_column(Text, nullable=True)
-    huyet_ap_tam_thu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    huyet_ap_tam_truong: Mapped[str] = mapped_column(Text, nullable=False)
+    huyet_ap_tam_thu: Mapped[str] = mapped_column(Text, nullable=False)
 
-    chi_so_duong_huyet: Mapped[str | None] = mapped_column(Text, nullable=True)
-    chi_so_hba1c: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chi_so_duong_huyet: Mapped[str] = mapped_column(Text, nullable=False)
+    chi_so_hba1c: Mapped[str] = mapped_column(Text, nullable=False)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
     dieu_tri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class ReviewRecord(Base):
@@ -77,6 +83,7 @@ _SYSTEM_REPORT_METADATA_FIELDS = {
     "source_size_bytes",
     "source_row_number",
     "facility_id",
+    "uploaded_at"
 }
 _SYSTEM_REPORT_CANONICAL_FIELDS = {
     column.name
