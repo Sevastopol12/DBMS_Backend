@@ -6,7 +6,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+from redis import Redis
+
 from backend.database.connection import (
+    PoolSettings,
     RDBAsyncConnectionConfig,
     StorageAsyncConnectionConfig,
     close_storage,
@@ -18,7 +21,7 @@ from backend.database.connection import (
     storage_settings_from_env,
     task_pool_settings,
 )
-
+from backend.redis_cache.connection import close_redis, create_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,8 @@ class TaskResources:
 
 _storage_lock = threading.Lock()
 _worker_storage: StorageAsyncConnectionConfig | None = None
+_redis_lock = threading.Lock()
+_worker_redis: Redis | None = None
 
 
 def get_worker_storage() -> StorageAsyncConnectionConfig:
@@ -64,6 +69,36 @@ def reset_worker_storage_for_tests() -> None:
     close_worker_storage()
 
 
+def get_worker_redis() -> Redis:
+    """Return the one process-wide Redis client shared by worker tasks."""
+
+    global _worker_redis
+    with _redis_lock:
+        if _worker_redis is None:
+            _worker_redis = create_redis_client()
+        return _worker_redis
+
+
+def close_worker_redis() -> None:
+    """Close and forget the process-wide worker Redis client."""
+
+    global _worker_redis
+    with _redis_lock:
+        client = _worker_redis
+        _worker_redis = None
+        if client is not None:
+            try:
+                close_redis(client)
+            except Exception as exc:  # pragma: no cover - defensive shutdown path
+                logger.error("worker Redis close failed: %s", type(exc).__name__)
+
+
+def reset_worker_redis_for_tests() -> None:
+    """Clear the lazy Redis singleton between isolated tests."""
+
+    close_worker_redis()
+
+
 async def _dispose_safely(config: RDBAsyncConnectionConfig | None, label: str) -> None:
     if config is None:
         return
@@ -83,10 +118,13 @@ def _close_storage_safely(config: StorageAsyncConnectionConfig | None) -> None:
 
 
 @asynccontextmanager
-async def task_resources() -> AsyncIterator[TaskResources]:
+async def task_resources(
+    pool: PoolSettings | None = None,
+) -> AsyncIterator[TaskResources]:
     """Create task-local database engines and dispose them on the same loop."""
 
-    pool = task_pool_settings()
+    if pool is None:
+        pool = task_pool_settings()
     staging: RDBAsyncConnectionConfig | None = None
     production: RDBAsyncConnectionConfig | None = None
     try:
@@ -125,9 +163,12 @@ async def probe_worker_dependencies() -> None:
 
 __all__ = [
     "TaskResources",
+    "close_worker_redis",
     "close_worker_storage",
+    "get_worker_redis",
     "get_worker_storage",
     "probe_worker_dependencies",
+    "reset_worker_redis_for_tests",
     "reset_worker_storage_for_tests",
     "task_resources",
 ]

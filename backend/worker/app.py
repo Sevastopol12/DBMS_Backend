@@ -6,8 +6,11 @@ from celery import Celery
 from celery.signals import worker_init, worker_shutdown
 from sqlalchemy.engine import make_url
 
-from .resources import close_worker_storage, probe_worker_dependencies
-
+from .resources import (
+    close_worker_redis,
+    close_worker_storage,
+    probe_worker_dependencies,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +52,7 @@ def _probe_worker_on_init(sender=None, **kwargs):
 @worker_shutdown.connect
 def _close_worker_on_shutdown(sender=None, **kwargs):
     close_worker_storage()
+    close_worker_redis()
 
 if __name__ == "__main__":
     celery.start()
