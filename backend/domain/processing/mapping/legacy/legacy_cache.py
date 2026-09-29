@@ -1,13 +1,13 @@
 import logging
 import os
 from collections.abc import Iterator
+
 import redis
-from redis import Redis
 from pydantic import BaseModel
+from redis import Redis
 
-from ...models import HeaderMapValue, CacheSource
+from ...models import CacheSource, HeaderMapValue
 from ...transformation.normalization import normalize_header
-
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class MappingResponse(BaseModel):
     mapping: dict[str, str | None] | None = None
 
 
-class RedisCache:
+class MappingCache:
     def __init__(self, cache_client: Redis):
         self.client = cache_client
         self._unavailable: bool = False
@@ -104,7 +104,9 @@ class RedisCache:
                         yield decoded
             except redis.exceptions.RedisError as exc:
                 self._unavailable = True
-                logger.warning("Redis cache unavailable; falling back to database: %s", exc)
+                logger.warning(
+                    "Redis cache unavailable; falling back to database: %s", exc
+                )
                 return
 
     def get_mapping_hint(self, map_request: MappingRequest) -> MappingResponse:
@@ -119,17 +121,20 @@ class RedisCache:
 
         return MappingResponse(filename=map_request.filename, mapping=map_result)
 
+    def get_metrics(self):
+        return self.client.hget(os.getenv("METRICS"))
 
-def get_application_cache() -> RedisCache:
+
+def get_application_cache() -> MappingCache:
     redis_client: Redis = Redis(
         host=os.getenv("CACHE_HOST"), port=os.getenv("CACHE_PORT")
     )
-    return RedisCache(redis_client)
+    return MappingCache(redis_client)
 
 
 __all__ = [
     "get_application_cache",
-    "RedisCache",
+    "MappingCache",
     "MappingRequest",
     "MappingResponse",
 ]

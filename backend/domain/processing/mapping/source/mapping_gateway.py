@@ -9,6 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
 
 import redis
+from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
 
 from .snapshot import (
@@ -18,8 +19,6 @@ from .snapshot import (
     MappingSourceUnavailable,
     UnavailableMappingSource,
 )
-
-from dotenv import load_dotenv
 
 load_dotenv()
 
