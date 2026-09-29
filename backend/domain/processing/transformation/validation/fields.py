@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime
 import re
+from datetime import date, datetime
 from typing import Any
 
 from backend.database.canonical import CANONICAL_FIELD_SET
+from backend.timezone import VIETNAM_TZ
+
 from ...identifiers_helper import classify_bhxh
+from ...models import RuleMode, ValidationPolicy
 from ..normalization import (
     normalize_datetime,
     normalize_identifier,
@@ -21,7 +24,6 @@ from ..plausibility import (
     glucose_to_mmol,
     parse_measurement,
 )
-from ...models import RuleMode, ValidationPolicy
 from .core import (
     ValidationResult,
     ValidationState,
@@ -33,7 +35,6 @@ from .core import (
     _with_issue,
     text_quality,
 )
-
 
 _YEAR = re.compile(r"^(18|19|20|21)\d{2}$")
 _ICD = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?$", re.I)
@@ -106,9 +107,14 @@ def _validate_birth_year(
     elif normalized:
         try:
             parsed = datetime.fromisoformat(normalized)
+            vietnam_parsed = (
+                parsed.astimezone(VIETNAM_TZ)
+                if parsed.tzinfo is not None
+                else parsed
+            )
             result = ValidationResult(
                 state=ValidationState.VALID,
-                normalized_value=parsed.date().isoformat(),
+                normalized_value=vietnam_parsed.date().isoformat(),
             )
         except ValueError:
             result = None
@@ -156,7 +162,12 @@ def _validate_visit_date(
                 normalized_value=value,
             )
         result = ValidationResult(state=ValidationState.VALID, normalized_value=parsed)
-        issue = check_visit_date(parsed.date(), reference)
+        vietnam_date = (
+            parsed.astimezone(VIETNAM_TZ).date()
+            if parsed.tzinfo is not None
+            else parsed.date()
+        )
+        issue = check_visit_date(vietnam_date, reference)
         return _with_issue(result, mode, issue)
     return result
 
