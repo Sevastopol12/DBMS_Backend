@@ -30,11 +30,11 @@ class UnsupportedDelimiterError(ReaderError):
 
 
 __all__ = [
-    "ReaderError",
-    "UnsupportedFormatError",
-    "UnreadableInputError",
     "CorruptFileError",
     "EmptyFileError",
     "EmptyWorksheetError",
+    "ReaderError",
+    "UnreadableInputError",
     "UnsupportedDelimiterError",
+    "UnsupportedFormatError",
 ]

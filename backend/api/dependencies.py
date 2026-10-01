@@ -46,11 +46,11 @@ def get_metrics_service(
 
 
 __all__ = [
-    "get_resources",
     "get_ingestion_repository",
-    "get_storage_service",
     "get_mapping_cache",
     "get_metrics_cache",
     "get_metrics_repository",
     "get_metrics_service",
+    "get_resources",
+    "get_storage_service",
 ]

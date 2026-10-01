@@ -94,4 +94,4 @@ class IngestionService:
             raise
 
 
-__all__ = ["IngestionService", "SUPPORTED_CONTENT_TYPES"]
+__all__ = ["SUPPORTED_CONTENT_TYPES", "IngestionService"]

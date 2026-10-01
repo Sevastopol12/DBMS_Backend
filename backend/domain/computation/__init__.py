@@ -8,9 +8,9 @@ from .models import (
 from .pipeline import ComputationPipeline, ComputationResult
 
 __all__ = [
+    "ComorbidityRow",
     "ComputationPipeline",
     "ComputationResult",
-    "ComorbidityRow",
     "DataQualityRow",
     "PatientStateRow",
     "PeriodGrain",

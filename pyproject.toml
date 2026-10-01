@@ -17,8 +17,10 @@ dependencies = [
     "pandas>=3.0.5",
     "pydantic>=2.13.4",
     "rapidfuzz>=3.14.5",
+    "redbeat>=0.0.1",
     "redis>=8.1.0",
     "requests>=2.34.2",
+    "ruff>=0.16.9",
     "s3fs>=2026.7.0",
     "sqlalchemy>=2.0.52",
     "unidecode>=1.4.0",
@@ -34,3 +36,6 @@ asyncio_mode = "strict"
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.ruff]
+extend-exclude = ["docs", ".uv-cache", ".venv"]

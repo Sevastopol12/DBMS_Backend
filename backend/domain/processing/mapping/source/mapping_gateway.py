@@ -5,8 +5,9 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable
+from typing import Any
 
 import redis
 from dotenv import load_dotenv

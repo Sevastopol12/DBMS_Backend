@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 from ...models import ColumnMap, MappingOperation
 from ...transformation.normalization import normalize_header
@@ -63,7 +64,7 @@ class MappingCatalog:
     def for_task(
         cls,
         cache_client: MappingSource | None = None,
-    ) -> "MappingCatalog":
+    ) -> MappingCatalog:
         return cls((), cache_client=cache_client)
 
     @staticmethod

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Iterable, TypeAlias
+from typing import Any
 from uuid import UUID
 
 from pydantic import (
@@ -22,8 +23,8 @@ from backend.database.canonical import (
 )
 from backend.timezone import VIETNAM_TZ, ensure_vietnam_aware
 
-SourceCellValue: TypeAlias = object | None
-SourceRow: TypeAlias = dict[str, SourceCellValue]
+type SourceCellValue = object | None
+type SourceRow = dict[str, SourceCellValue]
 
 
 class ReportRow(BaseModel):
@@ -174,7 +175,7 @@ class MappingPlan(BaseModel):
     coverage_ratio: float = 0.0
 
     @model_validator(mode="after")
-    def calculate_statistics(self) -> "MappingPlan":
+    def calculate_statistics(self) -> MappingPlan:
         invalid = set(self.field_plans) - CANONICAL_FIELD_SET
         if invalid:
             raise ValueError(f"Unknown mapping targets: {sorted(invalid)}")
@@ -200,7 +201,7 @@ class MappingPlan(BaseModel):
         *,
         unmapped_headers: Iterable[str] = (),
         ambiguous_headers: Iterable[str] = (),
-    ) -> "MappingPlan":
+    ) -> MappingPlan:
         plans = {plan.target_field: plan for plan in field_plans}
         return cls(
             field_plans=plans,
@@ -366,7 +367,7 @@ class TransformResult(BaseModel):
     review_records: list[RowIssueRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def synchronize_counts(self) -> "TransformResult":
+    def synchronize_counts(self) -> TransformResult:
         supplied_count = "accepted_row_count" in self.model_fields_set
         if supplied_count and self.accepted_row_count != len(self.accepted_rows):
             raise ValueError("accepted_row_count must match accepted_rows")
@@ -409,25 +410,25 @@ def safe_issue_sample(row_number: int, issue_code: str) -> dict[str, str | int]:
 
 
 __all__ = [
-    "SourceRow",
-    "ReportRow",
-    "ColumnMap",
     "CacheSource",
-    "HeaderMapValue",
-    "SourceDataset",
-    "SourceCellValue",
-    "FileStatus",
+    "ColumnMap",
     "FieldPlan",
+    "FieldQuality",
     "FileAcceptancePolicy",
     "FileDecision",
-    "FieldQuality",
+    "FileStatus",
+    "HeaderMapValue",
     "MappingOperation",
     "MappingPlan",
     "ProcessingStage",
     "QualityReport",
+    "ReportRow",
     "RowDisposition",
     "RowIssueRecord",
     "RuleMode",
+    "SourceCellValue",
+    "SourceDataset",
+    "SourceRow",
     "TransformResult",
     "ValidationPolicy",
     "safe_issue_sample",

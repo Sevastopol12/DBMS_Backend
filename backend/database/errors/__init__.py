@@ -13,7 +13,6 @@ class FileObjectNotFound(DatabaseServiceError):
 class StorageUnavailable(DatabaseServiceError):
     """The source object store could not be reached or returned an error."""
 
-    pass
 
 
 class MetricsRunInProgress(DatabaseServiceError):
@@ -43,8 +42,8 @@ def is_run_in_progress_integrity_error(error: BaseException) -> bool:
 
 
 __all__ = [
-    "CONTENT_HASH_UNIQUE_CONSTRAINT",
     "COMPUTATION_RUN_SINGLE_RUNNING_INDEX",
+    "CONTENT_HASH_UNIQUE_CONSTRAINT",
     "DuplicatedContentError",
     "FileObjectNotFound",
     "MetricsRunInProgress",

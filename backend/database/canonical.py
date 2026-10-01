@@ -60,12 +60,12 @@ def canonical_field(name: str) -> CanonicalField:
 
 
 __all__ = [
-    "CanonicalField",
+    "ACCEPTANCE_FIELDS",
     "CANONICAL_FIELDS",
     "CANONICAL_FIELD_NAMES",
     "CANONICAL_FIELD_SET",
     "REQUIRED_CANONICAL_FIELDS",
-    "ACCEPTANCE_FIELDS",
-    "is_canonical_field",
+    "CanonicalField",
     "canonical_field",
+    "is_canonical_field",
 ]

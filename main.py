@@ -1,8 +1,8 @@
 import uvicorn
 from fastapi import FastAPI
-from backend.api.routes import fetch_router, metrics_router, upload_router
-from backend.api.resources import api_lifespan
 
+from backend.api.resources import api_lifespan
+from backend.api.routes import fetch_router, metrics_router, upload_router
 
 app = FastAPI(lifespan=api_lifespan)
 

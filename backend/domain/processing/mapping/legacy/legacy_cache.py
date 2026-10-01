@@ -133,8 +133,8 @@ def get_application_cache() -> MappingCache:
 
 
 __all__ = [
-    "get_application_cache",
     "MappingCache",
     "MappingRequest",
     "MappingResponse",
+    "get_application_cache",
 ]

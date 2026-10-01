@@ -15,13 +15,13 @@ from .keys import (
 )
 
 __all__ = [
-    "MetricsCache",
-    "close_redis",
-    "create_redis_client",
-    "create_redis_pool",
     "LAST_COMPUTED_AT_KEY",
     "METRICS_CACHE_TTL_SECONDS",
+    "MetricsCache",
+    "close_redis",
     "comorbidity_key",
+    "create_redis_client",
+    "create_redis_pool",
     "data_quality_key",
     "facility_scope",
     "out_of_control_key",
