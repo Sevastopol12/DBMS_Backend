@@ -34,20 +34,18 @@ class IngestionService:
             )
 
         file_id: UUID = uuid4()
+        facility_id: UUID = file.facility_id
         filename = _get_safe_filename(file.filename)
         created_at = now_vietnam()
-        object_key: str = (
-            f"{created_at:%Y_%m_%d}/"
-            f"{file_id}/{filename}"
-        )
+        object_key: str = f"{created_at:%Y_%m_%d}/{file_id}/{filename}"
 
         file_info = FileInfo(
             id=file_id,
+            facility_id=facility_id,
             filename=filename,
             object_key=object_key,
             content_type=file.content_type,
             status=FileStatus.CREATED,
-            facility_id=uuid4(),
             created_at=created_at,
         )
 
