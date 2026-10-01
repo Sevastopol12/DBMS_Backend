@@ -37,7 +37,7 @@ from .core import (
 )
 
 _YEAR = re.compile(r"^(18|19|20|21)\d{2}$")
-_ICD = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?$", re.I)
+_ICD = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?$", re.IGNORECASE)
 
 
 def _validate_cccd(

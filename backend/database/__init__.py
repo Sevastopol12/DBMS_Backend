@@ -30,14 +30,14 @@ async def load_header_mappings() -> tuple[HeaderMappingRow, ...]:
 
     config = create_connection("mapping")
     try:
-        repository_type = getattr(sys.modules[__name__], "HeaderMappingRepository")
+        repository_type = sys.modules[__name__].HeaderMappingRepository
         return await repository_type(config).load_active()
     finally:
         await config.async_engine.dispose()
 
 
 __all__ = [
-    "load_header_mappings",
     "HeaderMappingRepository",
     "HeaderMappingRow",
+    "load_header_mappings",
 ]

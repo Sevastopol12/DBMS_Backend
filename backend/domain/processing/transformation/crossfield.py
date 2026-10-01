@@ -1,8 +1,9 @@
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping
+from typing import Any
 
 from backend.timezone import VIETNAM_TZ
 
@@ -49,7 +50,7 @@ def _birth_info(value: Any) -> tuple[int, date | None] | None:
     if re.fullmatch(r"\d{4}", text):
         return int(text), None
     try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text)
     except (TypeError, ValueError):
         try:
             parsed_date = date.fromisoformat(text)
@@ -72,7 +73,7 @@ def _visit_date(value: Any) -> date | None:
         return None
     text = value.strip()
     try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text)
         local = parsed.astimezone(VIETNAM_TZ) if parsed.tzinfo is not None else parsed
         return local.date()
     except (TypeError, ValueError):

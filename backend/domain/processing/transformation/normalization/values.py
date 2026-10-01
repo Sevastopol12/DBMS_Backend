@@ -156,10 +156,10 @@ def normalize_measurement(value: Any) -> str | None:
 
 
 __all__ = [
-    "normalize_text",
-    "normalize_identifier",
     "normalize_date",
     "normalize_datetime",
-    "normalize_numeric",
+    "normalize_identifier",
     "normalize_measurement",
+    "normalize_numeric",
+    "normalize_text",
 ]

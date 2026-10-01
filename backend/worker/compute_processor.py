@@ -315,4 +315,4 @@ class ComputeProcessor:
         )
 
 
-__all__ = ["ComputeProcessor", "PIPELINE_VERSION", "compute_fingerprint"]
+__all__ = ["PIPELINE_VERSION", "ComputeProcessor", "compute_fingerprint"]

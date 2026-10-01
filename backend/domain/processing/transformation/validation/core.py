@@ -134,13 +134,12 @@ def text_quality(value: Any, *, field: str) -> ValidationResult:
     if (
         field in {"ho_ten", "dia_chi", "ghi_chu", "dieu_tri", "chan_doan_di_kem"}
         and len(text) > 2
-    ):
-        if not any(char.isalpha() for char in text):
-            return ValidationResult(
-                state=ValidationState.SUSPICIOUS,
-                issue_code="MALFORMED_TEXT",
-                normalized_value=text,
-            )
+    ) and not any(char.isalpha() for char in text):
+        return ValidationResult(
+            state=ValidationState.SUSPICIOUS,
+            issue_code="MALFORMED_TEXT",
+            normalized_value=text,
+        )
     return ValidationResult(state=ValidationState.VALID, normalized_value=text)
 
 

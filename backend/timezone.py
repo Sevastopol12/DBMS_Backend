@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 VIETNAM_TZ_NAME = "Asia/Ho_Chi_Minh"
 VIETNAM_TZ = ZoneInfo(VIETNAM_TZ_NAME)
-UTC = timezone.utc
+UTC = UTC
 
 
 def now_vietnam() -> datetime:
