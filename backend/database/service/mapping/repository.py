@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from backend.database.connection import RDBAsyncConnectionConfig
-from backend.database.mapping.schema import HeaderMapping
+from backend.database.service.mapping.schema import HeaderMapping
 
 
 @dataclass(frozen=True)

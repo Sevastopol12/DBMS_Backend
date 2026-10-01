@@ -7,7 +7,6 @@ from .rdb import (
     probe_connection,
     task_pool_settings,
 )
-
 from .storage import (
     StorageAsyncConnectionConfig,
     close_storage,
@@ -15,7 +14,6 @@ from .storage import (
     probe_storage,
     storage_settings_from_env,
 )
-
 
 __all__ = [
     "PoolSettings",

@@ -1,6 +1,4 @@
-from datetime import datetime
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
 
 from backend.api.dto import (
     IngestionComplete,
@@ -9,10 +7,10 @@ from backend.api.dto import (
     _get_safe_filename,
     _serialize_ingestion,
 )
-from backend.database.service import StorageService, IngestionRepository
+from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
-
+from backend.timezone import now_vietnam
 
 SUPPORTED_CONTENT_TYPES = {
     "text/csv",
@@ -36,20 +34,19 @@ class IngestionService:
             )
 
         file_id: UUID = uuid4()
+        facility_id: UUID = file.facility_id
         filename = _get_safe_filename(file.filename)
-        object_key: str = (
-            f"{datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')):%Y_%m_%d}/"
-            f"{file_id}/{filename}"
-        )
+        created_at = now_vietnam()
+        object_key: str = f"{created_at:%Y_%m_%d}/{file_id}/{filename}"
 
         file_info = FileInfo(
             id=file_id,
+            facility_id=facility_id,
             filename=filename,
             object_key=object_key,
             content_type=file.content_type,
             status=FileStatus.CREATED,
-            facility_id=uuid4(),
-            created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+            created_at=created_at,
         )
 
         await self._repository.create(file_info)

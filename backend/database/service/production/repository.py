@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from backend.database.connection import RDBAsyncConnectionConfig
 from backend.database.service.production.schema import SystemReport
 from backend.domain.processing.models import ReportRow
+from backend.timezone import ensure_vietnam_aware, now_vietnam
 
 
 @dataclass
@@ -56,8 +57,16 @@ class ReportRepository:
                 "source_file_id": source_file_id,
                 "source_size_bytes": source_size_bytes,
                 "source_row_number": row_numbers[index],
-                **{field: getattr(row, field) for field in ReportRow.model_fields},
+                **{
+                    field: (
+                        ensure_vietnam_aware(getattr(row, field))
+                        if field == "ngay_kham" and getattr(row, field) is not None
+                        else getattr(row, field)
+                    )
+                    for field in ReportRow.model_fields
+                },
                 "facility_id": facility_id,
+                "uploaded_at": now_vietnam(),
             }
             for index, row in enumerate(rows)
         ]

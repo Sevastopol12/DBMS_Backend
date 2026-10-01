@@ -1,8 +1,10 @@
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-import re
 from typing import Any, Mapping
+
+from backend.timezone import VIETNAM_TZ
 
 from ..identifiers_helper import decode_cccd
 from .reference import cccd_provinces
@@ -36,7 +38,8 @@ def _birth_info(value: Any) -> tuple[int, date | None] | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, datetime):
-        return value.year, value.date()
+        local = value.astimezone(VIETNAM_TZ) if value.tzinfo is not None else value
+        return local.year, local.date()
     if isinstance(value, date):
         return value.year, value
     if not isinstance(value, str):
@@ -53,21 +56,25 @@ def _birth_info(value: Any) -> tuple[int, date | None] | None:
         except (TypeError, ValueError):
             return None
         return parsed_date.year, parsed_date
-    return parsed.year, parsed.date()
+    local = parsed.astimezone(VIETNAM_TZ) if parsed.tzinfo is not None else parsed
+    return local.year, local.date()
 
 
 def _visit_date(value: Any) -> date | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, datetime):
-        return value.date()
+        local = value.astimezone(VIETNAM_TZ) if value.tzinfo is not None else value
+        return local.date()
     if isinstance(value, date):
         return value
     if not isinstance(value, str):
         return None
     text = value.strip()
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        local = parsed.astimezone(VIETNAM_TZ) if parsed.tzinfo is not None else parsed
+        return local.date()
     except (TypeError, ValueError):
         try:
             return date.fromisoformat(text)
