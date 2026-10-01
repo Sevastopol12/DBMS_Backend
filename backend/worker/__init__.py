@@ -1,5 +1,4 @@
-from .tasks import transform
 from .app import celery
-
+from .tasks import transform
 
 __all__ = ["celery", "transform"]

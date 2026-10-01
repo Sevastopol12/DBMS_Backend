@@ -6,7 +6,16 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
+from backend.database.canonical import (
+    ACCEPTANCE_FIELDS,
+    CANONICAL_FIELD_NAMES,
+    CANONICAL_FIELD_SET,
+)
+from backend.timezone import today_vietnam
+
+from .mapping import MappingCatalog, MappingSource, match_headers
 from .models import (
+    ColumnMap,
     FieldPlan,
     FieldQuality,
     FileAcceptancePolicy,
@@ -15,32 +24,26 @@ from .models import (
     MappingPlan,
     ProcessingStage,
     QualityReport,
+    ReportRow,
     RowDisposition,
     RowIssueRecord,
     RuleMode,
+    SourceDataset,
     TransformResult,
     safe_issue_sample,
 )
-
-from backend.database.canonical import (
-    ACCEPTANCE_FIELDS,
-    CANONICAL_FIELD_NAMES,
-    CANONICAL_FIELD_SET,
-)
-from .mapping import MappingCatalog, MappingSource, match_headers
+from .reader import read_source_dataset
 from .transformation import crossfield
 from .transformation.normalization import (
     normalize_date,
+    normalize_datetime,
     normalize_header,
     normalize_identifier,
     normalize_measurement,
-    normalize_datetime,
     normalize_text,
 )
 from .transformation.operations import execute_operation
-from .reader import read_source_dataset
 from .transformation.validation import ValidationResult, ValidationState, validate_field
-from .models import ColumnMap, ReportRow, SourceDataset
 
 
 @dataclass(frozen=True)
@@ -91,7 +94,9 @@ class TransformPipeline:
         self.policy = policy or FileAcceptancePolicy()
         self.operation_handlers = operation_handlers or {}
         self.reference_date = (
-            reference_date or self.policy.validation.reference_date or date.today()
+            reference_date
+            or self.policy.validation.reference_date
+            or today_vietnam()
         )
 
     async def transform(

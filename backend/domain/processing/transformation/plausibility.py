@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-import re
 
 from ..issues import Issue
-
 
 # starting values - a clinician must sign off
 BOUNDS = {
@@ -126,10 +125,10 @@ def check_visit_date(visit: date, reference_date: date) -> Issue | None:
             or not isinstance(reference_date, date)
         ):
             return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
-            lower, _ = BOUNDS["visit_date"]
-            if not lower <= visit <= reference_date + timedelta(days=1):
-                return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
-            return None
+        lower, _ = BOUNDS["visit_date"]
+        if not lower <= visit <= reference_date + timedelta(days=1):
+            return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
+        return None
     except Exception:
         return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
 

@@ -1,6 +1,7 @@
-import os
 import asyncio
 import logging
+import os
+from dataclasses import dataclass, field
 
 from boto3 import client
 from botocore.client import BaseClient
@@ -11,11 +12,9 @@ from botocore.exceptions import (
     EndpointConnectionError,
     NoCredentialsError,
 )
-from dataclasses import dataclass, field
+from dotenv import load_dotenv
 
 from backend.database.errors import StorageUnavailable
-
-from dotenv import load_dotenv
 
 load_dotenv()
 

@@ -20,11 +20,11 @@ class CanonicalField:
 
 CANONICAL_FIELDS: tuple[CanonicalField, ...] = (
     CanonicalField("ma_bhyt", str),
-    CanonicalField("cccd", str, required=True),
+    CanonicalField("cccd", str),
     CanonicalField("ho_ten", str, required=True),
     CanonicalField("gioi_tinh", str),
     CanonicalField("nam_sinh", str, required=True),
-    CanonicalField("sdt", str),
+    CanonicalField("sdt", str, required=True),
     CanonicalField("dia_chi", str),
     CanonicalField("ngay_kham", datetime, required=True),
     CanonicalField("icd_tha", str, required=True),

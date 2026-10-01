@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 from enum import Enum
-import uuid
-from typing import Any, Iterable
-from typing import TypeAlias
+from typing import Any, Iterable, TypeAlias
 from uuid import UUID
 
 from pydantic import (
@@ -21,7 +20,7 @@ from backend.database.canonical import (
     CANONICAL_FIELD_NAMES,
     CANONICAL_FIELD_SET,
 )
-
+from backend.timezone import VIETNAM_TZ, ensure_vietnam_aware
 
 SourceCellValue: TypeAlias = object | None
 SourceRow: TypeAlias = dict[str, SourceCellValue]
@@ -67,15 +66,19 @@ class ReportRow(BaseModel):
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
+            # Preserve an already-constructed datetime object for callers
+            # that rely on model pass-through identity.  File ingestion uses
+            # normalize_datetime before constructing ReportRow, and the
+            # persistence boundary enforces awareness as a final guard.
             return value
         if isinstance(value, date):
-            return datetime.combine(value, datetime.min.time())
+            return datetime.combine(value, datetime.min.time(), tzinfo=VIETNAM_TZ)
         if isinstance(value, str):
             text = value.strip()
             if not text:
                 return None
             try:
-                return datetime.fromisoformat(text)
+                return ensure_vietnam_aware(datetime.fromisoformat(text))
             except ValueError:
                 pass
         raise ValueError("ngay_kham must be an ISO date or datetime")
@@ -271,6 +274,7 @@ class QualityReport(BaseModel):
     """Safe aggregate report; it intentionally contains no raw row values."""
 
     file_id: UUID | None = None
+    facility_id: UUID | None = None
     decision: FileDecision = FileDecision.ACCEPTED
     processing_stage: ProcessingStage = ProcessingStage.COMPLETED
     total_target_fields: int = len(CANONICAL_FIELD_NAMES)

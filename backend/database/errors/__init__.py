@@ -16,7 +16,16 @@ class StorageUnavailable(DatabaseServiceError):
     pass
 
 
+class MetricsRunInProgress(DatabaseServiceError):
+    pass
+
+
+class MetricsStoreUnavailable(DatabaseServiceError):
+    pass
+
+
 CONTENT_HASH_UNIQUE_CONSTRAINT = "ingestion_files_content_hash_unique"
+COMPUTATION_RUN_SINGLE_RUNNING_INDEX = "computation_run_log_single_running"
 
 
 def is_duplicate_content_integrity_error(error: BaseException) -> bool:
@@ -26,10 +35,21 @@ def is_duplicate_content_integrity_error(error: BaseException) -> bool:
     return getattr(diagnostics, "constraint_name", None) == CONTENT_HASH_UNIQUE_CONSTRAINT
 
 
+def is_run_in_progress_integrity_error(error: BaseException) -> bool:
+    """Identify the single-running computation constraint without parsing messages."""
+    original = getattr(error, "orig", error)
+    diagnostics = getattr(original, "diag", None)
+    return getattr(diagnostics, "constraint_name", None) == COMPUTATION_RUN_SINGLE_RUNNING_INDEX
+
+
 __all__ = [
     "CONTENT_HASH_UNIQUE_CONSTRAINT",
+    "COMPUTATION_RUN_SINGLE_RUNNING_INDEX",
     "DuplicatedContentError",
     "FileObjectNotFound",
+    "MetricsRunInProgress",
+    "MetricsStoreUnavailable",
     "StorageUnavailable",
     "is_duplicate_content_integrity_error",
+    "is_run_in_progress_integrity_error",
 ]
