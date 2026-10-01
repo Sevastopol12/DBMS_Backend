@@ -37,7 +37,7 @@ class IssueCodeCount(BaseModel):
 
 
 class PeriodSummaryMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: ApiDateTime
     period_end: ApiDateTime
@@ -63,7 +63,7 @@ class PeriodSummaryMetric(BaseModel):
 
 
 class ComorbidityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: ApiDateTime
     diagnosis_label: str
@@ -73,7 +73,7 @@ class ComorbidityMetric(BaseModel):
 
 class PatientStateMetric(BaseModel):
     patient_key: str
-    facility_id: UUID | None
+    facility_id: UUID
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -93,7 +93,7 @@ class PatientStateMetric(BaseModel):
 
 
 class DataQualityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: ApiDateTime
     period_end: ApiDateTime
@@ -112,6 +112,7 @@ class MetricsStatus(BaseModel):
 
 
 class IngestionCreate(BaseModel):
+    facility_id: UUID
     filename: str
     content: str | None = None
     content_type: str
@@ -119,6 +120,7 @@ class IngestionCreate(BaseModel):
 
 class IngestionComplete(BaseModel):
     id: UUID
+    facility_id: UUID
     content_hash: str
     size_bytes: int | None = None
     mappings: dict[str, Any] | None = None
@@ -126,6 +128,7 @@ class IngestionComplete(BaseModel):
 
 class IngestionResponse(BaseModel):
     id: UUID
+    facility_id: UUID
     filename: str | None = None
     object_key: str
     status: FileStatus
@@ -142,11 +145,11 @@ class IngestionResponse(BaseModel):
 
 class MetricsGrainQuery(BaseModel):
     grain: Literal["1D", "3D", "1W", "2W", "1M", "ALL"]
-    facility_id: UUID | None = None
+    facility_id: UUID = None
 
 
 class MetricsFacilityQuery(BaseModel):
-    facility_id: UUID | None = None
+    facility_id: UUID = None
 
 
 def _get_safe_filename(filename: str) -> str:
@@ -164,6 +167,7 @@ def _serialize_ingestion(
 ) -> IngestionResponse:
     return IngestionResponse(
         id=file.id,
+        facility_id=file.facility_id,
         filename=file.filename,
         object_key=file.object_key,
         status=file.status,
