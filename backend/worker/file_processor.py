@@ -42,20 +42,20 @@ class FileProcessor:
         self._operation_handlers = operation_handlers
 
     async def process_file(self, file_id: UUID) -> None:
-        claimed = await self._staging.claim(file_id)
-        if claimed is None:
-            return
-
-        object_key, mappings = claimed
-
-        file_info = await self._staging.get(file_id)
-        filename = (
-            file_info.filename
-            if file_info is not None
-            else object_key.rsplit("/", 1)[-1]
-        )
-
         try:
+            claimed = await self._staging.claim(file_id)
+            if claimed is None:
+                return
+
+            object_key, mappings = claimed
+
+            file_info = await self._staging.get(file_id)
+            filename = (
+                file_info.filename
+                if file_info is not None
+                else object_key.rsplit("/", 1)[-1]
+            )
+
             file_bytes = self._storage.get(object_key)
             if file_bytes is None:
                 await self._reject_input(file_id, "EMPTY_INPUT")
@@ -67,7 +67,7 @@ class FileProcessor:
             await self._fail(file_id, "STORAGE_UNAVAILABLE")
             return
         except Exception:
-            await self._fail(file_id, "STORAGE_UNAVAILABLE")
+            await self._fail(file_id, "INTERNAL ERROR")
             return
 
         # Acquire mapping source before transform.
