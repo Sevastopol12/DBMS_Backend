@@ -272,7 +272,11 @@ class FieldQuality(BaseModel):
 
 
 class QualityReport(BaseModel):
-    """Safe aggregate report; it intentionally contains no raw row values."""
+    """Safe aggregate report; it intentionally contains no raw row values.
+
+    ``flagged_rows`` overlaps the accepted-with-flags and rejected counters;
+    it is retained as a diagnostic legacy field and is not a balanced counter.
+    """
 
     file_id: UUID | None = None
     facility_id: UUID | None = None
@@ -284,6 +288,8 @@ class QualityReport(BaseModel):
     unmapped_headers: list[str] = Field(default_factory=list)
     ambiguous_headers: list[str] = Field(default_factory=list)
     total_rows: int = 0
+    accepted_clean_rows: int = 0
+    accepted_with_flags_rows: int = 0
     accepted_rows: int = 0
     flagged_rows: int = 0
     rejected_rows: int = 0
@@ -291,6 +297,22 @@ class QualityReport(BaseModel):
     issue_code_counts: dict[str, int] = Field(default_factory=dict)
     safe_error_samples: list[dict[str, str | int]] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def synchronize_accepted_rows(self) -> QualityReport:
+        self.accepted_rows = (
+            self.accepted_clean_rows + self.accepted_with_flags_rows
+        )
+        return self
+
+    @property
+    def counts_balanced(self) -> bool:
+        return (
+            self.accepted_clean_rows
+            + self.accepted_with_flags_rows
+            + self.rejected_rows
+            == self.total_rows
+        )
 
     @computed_field
     @property
