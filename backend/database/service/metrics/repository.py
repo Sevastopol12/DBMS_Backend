@@ -21,6 +21,7 @@ from backend.database.service.metrics.schema import (
     MetricPeriodSummary,
     PatientCurrentState,
 )
+from backend.database.service.metrics.scope import MetricsScope
 from backend.timezone import now_utc
 
 if TYPE_CHECKING:
@@ -273,7 +274,7 @@ class MetricsRepository:
 
     async def period_summary(
         self,
-        facility_id: UUID | None,
+        scope: MetricsScope,
         grain: str,
         *,
         run_id: UUID | None = None,
@@ -282,7 +283,7 @@ class MetricsRepository:
             MetricPeriodSummary.period_grain == grain
         )
         statement = self._scope_aggregate(
-            statement, MetricPeriodSummary, facility_id
+            statement, MetricPeriodSummary, scope
         ).order_by(
             MetricPeriodSummary.period_start.asc(),
             MetricPeriodSummary.facility_id.asc().nullslast(),
@@ -291,7 +292,7 @@ class MetricsRepository:
 
     async def comorbidity(
         self,
-        facility_id: UUID | None,
+        scope: MetricsScope,
         grain: str,
         *,
         run_id: UUID | None = None,
@@ -300,7 +301,7 @@ class MetricsRepository:
             MetricComorbidityBreakdown.period_grain == grain
         )
         statement = self._scope_aggregate(
-            statement, MetricComorbidityBreakdown, facility_id
+            statement, MetricComorbidityBreakdown, scope
         ).order_by(
             MetricComorbidityBreakdown.period_start.asc(),
             MetricComorbidityBreakdown.diagnosis_label.asc(),
@@ -312,15 +313,15 @@ class MetricsRepository:
 
     async def out_of_control(
         self,
-        facility_id: UUID | None,
+        scope: MetricsScope,
         *,
         run_id: UUID | None = None,
     ) -> list[dict]:
         statement = select(*_ROW_COLUMNS[PatientCurrentState]).where(
             PatientCurrentState.is_out_of_control.is_(True)
         )
-        statement = self._scope_patient_state(statement, facility_id).order_by(
-            PatientCurrentState.is_bp_crisis.desc().nullslast(),
+        statement = self._scope_patient_state(statement, scope).order_by(
+            PatientCurrentState.is_bp_severe.desc().nullslast(),
             PatientCurrentState.last_visit_date.desc().nullslast(),
             PatientCurrentState.patient_key.asc(),
         )
@@ -328,7 +329,7 @@ class MetricsRepository:
 
     async def data_quality(
         self,
-        facility_id: UUID | None,
+        scope: MetricsScope,
         grain: str,
         *,
         run_id: UUID | None = None,
@@ -337,7 +338,7 @@ class MetricsRepository:
             MetricDataQualitySummary.period_grain == grain
         )
         statement = self._scope_aggregate(
-            statement, MetricDataQualitySummary, facility_id
+            statement, MetricDataQualitySummary, scope
         ).order_by(
             MetricDataQualitySummary.period_start.asc(),
             MetricDataQualitySummary.facility_id.asc().nullslast(),
@@ -383,16 +384,20 @@ class MetricsRepository:
             raise MetricsStoreUnavailable(type(error).__name__) from error
 
     @staticmethod
-    def _scope_aggregate(statement: Select, model: Any, facility_id: UUID | None):
-        if facility_id is None:
-            return statement
-        return statement.where(model.facility_id == facility_id)
+    def _scope_aggregate(statement: Select, model: Any, scope: MetricsScope):
+        if scope.kind == "all":
+            return statement.where(model.facility_id.is_not(None))
+        if scope.kind == "rollup":
+            return statement.where(model.facility_id.is_(None))
+        return statement.where(model.facility_id == scope.facility_id)
 
     @staticmethod
-    def _scope_patient_state(statement: Select, facility_id: UUID | None):
-        if facility_id is None:
-            return statement
-        return statement.where(PatientCurrentState.facility_id == facility_id)
+    def _scope_patient_state(statement: Select, scope: MetricsScope):
+        if scope.kind == "rollup":
+            raise ValueError("rollup scope is invalid for patient state")
+        if scope.kind == "all":
+            return statement.where(PatientCurrentState.facility_id.is_not(None))
+        return statement.where(PatientCurrentState.facility_id == scope.facility_id)
 
     async def recent_runs(self, *, limit: int = 20) -> list[dict]:
         """Return the most recent computation runs, newest ``started_at`` first.

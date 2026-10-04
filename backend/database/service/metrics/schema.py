@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
 
-_PERIOD_GRAIN_CHECK = "period_grain IN ('1D','3D','1W','2W','1M','ALL')"
+_PERIOD_GRAIN_CHECK = "period_grain IN ('3D','2W','3M','6M','TODAY','ALL')"
 
 
 class MetricPeriodSummary(Base):
@@ -76,13 +76,16 @@ class MetricPeriodSummary(Base):
     bp_stage_normal_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    bp_stage_elevated_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     bp_stage_1_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     bp_stage_2_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    bp_stage_crisis_count: Mapped[int] = mapped_column(
+    bp_stage_severe_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     glycemic_control_rate: Mapped[float | None] = mapped_column(
@@ -94,7 +97,7 @@ class MetricPeriodSummary(Base):
     )
     avg_hba1c: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     median_hba1c: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
-    uploaded_date: Mapped[datetime] = mapped_column(
+    computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 
@@ -132,7 +135,7 @@ class MetricComorbidityBreakdown(Base):
     patient_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    uploaded_date: Mapped[datetime] = mapped_column(
+    computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 
@@ -163,7 +166,7 @@ class PatientCurrentState(Base):
     last_glucose: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     last_hba1c: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     is_bp_controlled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    is_bp_crisis: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    is_bp_severe: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_hba1c_controlled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_out_of_control: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     has_contact: Mapped[bool] = mapped_column(
@@ -175,7 +178,7 @@ class PatientCurrentState(Base):
     visit_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    uploaded_date: Mapped[datetime] = mapped_column(
+    computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 
@@ -214,16 +217,16 @@ class MetricDataQualitySummary(Base):
     files_processed: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    avg_coverage_ratio: Mapped[float | None] = mapped_column(
+    avg_mapping_coverage_ratio: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION, nullable=True
     )
     total_rows_seen: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    accepted_rows: Mapped[int] = mapped_column(
+    accepted_clean_rows: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    flagged_rows: Mapped[int] = mapped_column(
+    accepted_with_flags_rows: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     rejected_rows: Mapped[int] = mapped_column(
@@ -232,7 +235,7 @@ class MetricDataQualitySummary(Base):
     top_issue_codes: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'")
     )
-    uploaded_date: Mapped[datetime] = mapped_column(
+    computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 

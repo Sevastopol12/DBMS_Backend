@@ -37,6 +37,17 @@ def ensure_vietnam_aware(value: datetime) -> datetime:
     return value
 
 
+def start_of_day_vietnam(value: datetime) -> datetime:
+    """Return the start of ``value``'s Vietnam-local calendar day.
+
+    Naive values are interpreted as Vietnam local time.  Aware values are
+    converted to Vietnam time before the local date is truncated.
+    """
+
+    local = ensure_vietnam_aware(value).astimezone(VIETNAM_TZ)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 __all__ = [
     "UTC",
     "VIETNAM_TZ",
@@ -44,5 +55,6 @@ __all__ = [
     "ensure_vietnam_aware",
     "now_utc",
     "now_vietnam",
+    "start_of_day_vietnam",
     "today_vietnam",
 ]

@@ -1,7 +1,15 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import BigInteger, DateTime, Integer, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,6 +24,7 @@ class SystemReport(Base):
         UniqueConstraint(
             "source_file_id", "source_row_number", name="source_row_unique"
         ),
+        CheckConstraint("cccd ~ '^([0-9]{12})$'", name="report_cccd_format"),
         {"schema": "Diabetes"},
     )
 
@@ -26,7 +35,7 @@ class SystemReport(Base):
     source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
     ma_bhyt: Mapped[str] = mapped_column(Text, nullable=True)
-    cccd: Mapped[str] = mapped_column(Text, nullable=True)
+    cccd: Mapped[str] = mapped_column(Text, nullable=False)
     facility_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True
     )
@@ -39,15 +48,15 @@ class SystemReport(Base):
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
     ngay_kham: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    icd_tha: Mapped[str] = mapped_column(Text, nullable=False)
-    icd_dtd: Mapped[str] = mapped_column(Text, nullable=False)
+    icd_tha: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icd_dtd: Mapped[str | None] = mapped_column(Text, nullable=True)
     chan_doan_di_kem: Mapped[str] = mapped_column(Text, nullable=True)
 
-    huyet_ap_tam_truong: Mapped[str] = mapped_column(Text, nullable=False)
-    huyet_ap_tam_thu: Mapped[str] = mapped_column(Text, nullable=False)
+    huyet_ap_tam_truong: Mapped[str | None] = mapped_column(Text, nullable=True)
+    huyet_ap_tam_thu: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    chi_so_duong_huyet: Mapped[str] = mapped_column(Text, nullable=False)
-    chi_so_hba1c: Mapped[str] = mapped_column(Text, nullable=False)
+    chi_so_duong_huyet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chi_so_hba1c: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
     dieu_tri: Mapped[str | None] = mapped_column(Text, nullable=True)
