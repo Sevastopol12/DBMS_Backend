@@ -37,7 +37,7 @@ class IssueCodeCount(BaseModel):
 
 
 class PeriodSummaryMetric(BaseModel):
-    facility_id: UUID
+    facility_id: UUID | None
     period_grain: str
     period_start: ApiDateTime
     period_end: ApiDateTime
@@ -63,7 +63,7 @@ class PeriodSummaryMetric(BaseModel):
 
 
 class ComorbidityMetric(BaseModel):
-    facility_id: UUID
+    facility_id: UUID | None
     period_grain: str
     period_start: ApiDateTime
     diagnosis_label: str
@@ -73,7 +73,7 @@ class ComorbidityMetric(BaseModel):
 
 class PatientStateMetric(BaseModel):
     patient_key: str
-    facility_id: UUID
+    facility_id: UUID | None
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -93,7 +93,7 @@ class PatientStateMetric(BaseModel):
 
 
 class DataQualityMetric(BaseModel):
-    facility_id: UUID
+    facility_id: UUID | None
     period_grain: str
     period_start: ApiDateTime
     period_end: ApiDateTime

@@ -586,6 +586,7 @@ dependencies = [
     { name = "celery" },
     { name = "celery-redbeat" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "flower" },
     { name = "fsspec" },
     { name = "gevent" },
     { name = "ipykernel" },
@@ -615,6 +616,7 @@ requires-dist = [
     { name = "celery", specifier = ">=5.6.3" },
     { name = "celery-redbeat", specifier = ">=2.4.2" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
+    { name = "flower", specifier = ">=2.2.0" },
     { name = "fsspec", specifier = ">=2026.7.0" },
     { name = "gevent", specifier = ">=26.8.0" },
     { name = "ipykernel", specifier = "<7" },
@@ -824,6 +826,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/83/18/7a7c15657a3da5569b26fc51cde6a80f8d84cb54b3b1aea6d74a103db4ad/fastar-0.11.0-cp314-cp314t-win32.whl", hash = "sha256:5744551bc67c6fc6581cbd0e34a0fd6e2cd0bd30b43e94b1c3119cf35064b162", size = 453601, upload-time = "2026-04-13T17:11:53.726Z" },
     { url = "https://files.pythonhosted.org/packages/6d/d8/331b59a6de279f3ad75c10c02c40a12f21d64a437d9c3d6f1af2dcbd7a76/fastar-0.11.0-cp314-cp314t-win_amd64.whl", hash = "sha256:f4ce44e3b56c47cf38244b98d29f269b259740a580c47a2552efa5b96a5458fb", size = 486436, upload-time = "2026-04-13T17:11:40.089Z" },
     { url = "https://files.pythonhosted.org/packages/6b/fd/5390ec4f49100f3ecb9968a392f9e6d039f1e3fe0ecd28443716ff01e589/fastar-0.11.0-cp314-cp314t-win_arm64.whl", hash = "sha256:76c1359314355eafbc6989f20fb1ad565a3d10200117923b9da765a17e2f6f11", size = 461049, upload-time = "2026-04-13T17:11:25.918Z" },
+]
+
+[[package]]
+name = "flower"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "celery" },
+    { name = "humanize" },
+    { name = "prometheus-client" },
+    { name = "pytz" },
+    { name = "tornado" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/f9/3474dea8439722ff59804caba62532d08f147a2ffdf8cd8c8773e4b43faa/flower-2.2.0.tar.gz", hash = "sha256:c4f4751942ff8b5069e6604a136e073b860971b7658859bdc61da1dc17a4bb32", size = 1109093, upload-time = "2026-09-22T14:15:03.703Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/b6/650f730380002b78bcb488c0df96477dbdc57470731682587d6bc4951abf/flower-2.2.0-py2.py3-none-any.whl", hash = "sha256:374cbdd92282576ffab66b0da3c3038a2ba1ec34b343b8197dca2e85ce4209f1", size = 407554, upload-time = "2026-09-22T14:15:01.656Z" },
 ]
 
 [[package]]
@@ -1070,6 +1088,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406, upload-time = "2024-12-06T15:37:23.222Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
+]
+
+[[package]]
+name = "humanize"
+version = "4.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/ea/13a1ef3c12d12662905801495283530251918b70d62d368f1d2e0272c70d/humanize-4.16.0.tar.gz", hash = "sha256:7dc2244a2f84a4bfb1d36c37bac80cd78e35cdc5c119206d87b018e1445f3a3f", size = 89515, upload-time = "2026-06-30T16:17:29.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/aa/0b7365d30fed43e7a3449aba1fe20a0a7174d9cf13e282af4e69ac825441/humanize-4.16.0-py3-none-any.whl", hash = "sha256:353eb2f34c09d098b2880eee8bef21832eae6d174f48c5762fff7e5fcb74d01d", size = 137209, upload-time = "2026-06-30T16:17:28.36Z" },
 ]
 
 [[package]]
@@ -1560,6 +1587,15 @@ wheels = [
 ]
 
 [[package]]
+name = "prometheus-client"
+version = "0.26.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/73/f1334c29c2af4cd9dba6c7817e61b611bd0215e2eb5565c6064a4de18802/prometheus_client-0.26.0.tar.gz", hash = "sha256:04a91bcf94e2cf74a44a1a874d651a2e853ed354b6e822f3b7487751465d5c2b", size = 92910, upload-time = "2026-07-24T19:36:41.893Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl", hash = "sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6", size = 64494, upload-time = "2026-07-24T19:36:40.854Z" },
+]
+
+[[package]]
 name = "prompt-toolkit"
 version = "3.0.53"
 source = { registry = "https://pypi.org/simple" }
@@ -1859,6 +1895,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
+]
+
+[[package]]
+name = "pytz"
+version = "2026.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/ed/fa23d28713004418bbf2407127f80f385bfb0bf4e677bef02c25c27b00ee/pytz-2026.4.tar.gz", hash = "sha256:464303645bafafd72418898368b2429458f709cf1eb6a15372fbcc396b64da63", size = 318444, upload-time = "2026-09-24T03:58:40.443Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/11/e3df59614bebe0ca50c905442603eda64ae7ac19811d4e4f74aa2d51ca85/pytz-2026.4-py2.py3-none-any.whl", hash = "sha256:9d514388fbc89ca0833203464272ac485b8828568ab73532f5020f17e892a0ff", size = 506747, upload-time = "2026-09-24T03:58:38.629Z" },
 ]
 
 [[package]]

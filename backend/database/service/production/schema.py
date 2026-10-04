@@ -37,13 +37,11 @@ class SystemReport(Base):
     sdt: Mapped[str | None] = mapped_column(Text, nullable=False)
 
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ngay_kham: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    ngay_kham: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     icd_tha: Mapped[str] = mapped_column(Text, nullable=False)
     icd_dtd: Mapped[str] = mapped_column(Text, nullable=False)
-    chan_doan_di_kem: Mapped[str] = mapped_column(Text, nullable=False)
+    chan_doan_di_kem: Mapped[str] = mapped_column(Text, nullable=True)
 
     huyet_ap_tam_truong: Mapped[str] = mapped_column(Text, nullable=False)
     huyet_ap_tam_thu: Mapped[str] = mapped_column(Text, nullable=False)
@@ -83,7 +81,7 @@ _SYSTEM_REPORT_METADATA_FIELDS = {
     "source_size_bytes",
     "source_row_number",
     "facility_id",
-    "uploaded_at"
+    "uploaded_at",
 }
 _SYSTEM_REPORT_CANONICAL_FIELDS = {
     column.name

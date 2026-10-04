@@ -33,12 +33,14 @@ class MetricPeriodSummary(Base):
             name="metric_period_summary_unique",
             postgresql_nulls_not_distinct=True,
         ),
-        {"schema": "Diabetes"},
+        {"schema": "Metrics"},
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("Diabetes.computation_run_log.run_id"), nullable=False
+        PG_UUID(as_uuid=True),
+        ForeignKey("Metrics.computation_run_log.run_id"),
+        nullable=False,
     )
     facility_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True
@@ -47,7 +49,9 @@ class MetricPeriodSummary(Base):
     period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     visit_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
@@ -65,9 +69,7 @@ class MetricPeriodSummary(Base):
     )
     pct_tha: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     pct_dtd: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
-    pct_comorbid: Mapped[float | None] = mapped_column(
-        DOUBLE_PRECISION, nullable=True
-    )
+    pct_comorbid: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     bp_control_rate: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION, nullable=True
     )
@@ -86,16 +88,12 @@ class MetricPeriodSummary(Base):
     glycemic_control_rate: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION, nullable=True
     )
-    avg_glucose: Mapped[float | None] = mapped_column(
-        DOUBLE_PRECISION, nullable=True
-    )
+    avg_glucose: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     median_glucose: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION, nullable=True
     )
     avg_hba1c: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
-    median_hba1c: Mapped[float | None] = mapped_column(
-        DOUBLE_PRECISION, nullable=True
-    )
+    median_hba1c: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     uploaded_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -114,12 +112,14 @@ class MetricComorbidityBreakdown(Base):
             name="metric_comorbidity_breakdown_unique",
             postgresql_nulls_not_distinct=True,
         ),
-        {"schema": "Diabetes"},
+        {"schema": "Metrics"},
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("Diabetes.computation_run_log.run_id"), nullable=False
+        PG_UUID(as_uuid=True),
+        ForeignKey("Metrics.computation_run_log.run_id"),
+        nullable=False,
     )
     facility_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True
@@ -139,10 +139,12 @@ class MetricComorbidityBreakdown(Base):
 
 class PatientCurrentState(Base):
     __tablename__ = "patient_current_state"
-    __table_args__ = {"schema": "Diabetes"}
+    __table_args__ = ({"schema": "Metrics"},)
 
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("Diabetes.computation_run_log.run_id"), primary_key=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("Metrics.computation_run_log.run_id"),
+        primary_key=True,
     )
     patient_key: Mapped[str] = mapped_column(Text, primary_key=True)
     facility_id: Mapped[UUID | None] = mapped_column(
@@ -154,9 +156,7 @@ class PatientCurrentState(Base):
     last_visit_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_systolic: Mapped[float | None] = mapped_column(
-        DOUBLE_PRECISION, nullable=True
-    )
+    last_systolic: Mapped[float | None] = mapped_column(DOUBLE_PRECISION, nullable=True)
     last_diastolic: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION, nullable=True
     )
@@ -192,12 +192,14 @@ class MetricDataQualitySummary(Base):
             name="metric_data_quality_summary_unique",
             postgresql_nulls_not_distinct=True,
         ),
-        {"schema": "Diabetes"},
+        {"schema": "Metrics"},
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("Diabetes.computation_run_log.run_id"), nullable=False
+        PG_UUID(as_uuid=True),
+        ForeignKey("Metrics.computation_run_log.run_id"),
+        nullable=False,
     )
     facility_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True
@@ -206,7 +208,9 @@ class MetricDataQualitySummary(Base):
     period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     files_processed: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
@@ -237,7 +241,7 @@ class ComputationRunLog(Base):
     __tablename__ = "computation_run_log"
     __table_args__ = (
         CheckConstraint("status IN ('RUNNING','SUCCEEDED','FAILED')"),
-        {"schema": "Diabetes"},
+        {"schema": "Metrics"},
     )
 
     run_id: Mapped[UUID] = mapped_column(

@@ -4,6 +4,8 @@ from backend.api.metrics_service import MetricsService
 from backend.api.resources import ApiResources
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.metrics.repository import MetricsRepository
+from backend.database.service.production.repository import ReportRepository
+from backend.database.service.staging.workflow_repository import WorkflowRunRepository
 from backend.domain.processing.mapping.legacy.legacy_cache import MappingCache
 from backend.redis_cache.cache import MetricsCache
 
@@ -45,12 +47,26 @@ def get_metrics_service(
     return MetricsService(cache=cache, repository=repository)
 
 
+def get_workflow_repository(
+    res: ApiResources = Depends(get_resources),
+) -> WorkflowRunRepository:
+    return WorkflowRunRepository(config=res.staging)
+
+
+def get_report_repository(
+    res: ApiResources = Depends(get_resources),
+) -> ReportRepository:
+    return ReportRepository(config=res.application)
+
+
 __all__ = [
     "get_ingestion_repository",
     "get_mapping_cache",
     "get_metrics_cache",
     "get_metrics_repository",
     "get_metrics_service",
+    "get_report_repository",
     "get_resources",
     "get_storage_service",
+    "get_workflow_repository",
 ]

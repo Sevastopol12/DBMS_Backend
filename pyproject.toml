@@ -10,6 +10,7 @@ dependencies = [
     "celery>=5.6.3",
     "celery-redbeat>=2.4.2", # Redis-backed beat scheduler for multiple replicas.
     "fastapi[standard]>=0.141.1",
+    "flower>=2.2.0",
     "fsspec>=2026.7.0",
     "gevent>=26.8.0",
     "ipykernel<7",
