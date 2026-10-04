@@ -394,5 +394,35 @@ class MetricsRepository:
             return statement
         return statement.where(PatientCurrentState.facility_id == facility_id)
 
+    async def recent_runs(self, *, limit: int = 20) -> list[dict]:
+        """Return the most recent computation runs, newest ``started_at`` first.
+
+        Keys: run_id, status, started_at, finished_at, rows_processed,
+        error_message, computed_at, pruned_at.
+
+        Read errors are mapped to ``MetricsStoreUnavailable`` (same as all
+        other read methods on this repository).
+        """
+        statement = (
+            select(
+                ComputationRunLog.run_id,
+                ComputationRunLog.status,
+                ComputationRunLog.started_at,
+                ComputationRunLog.finished_at,
+                ComputationRunLog.rows_processed,
+                ComputationRunLog.error_message,
+                ComputationRunLog.computed_at,
+                ComputationRunLog.pruned_at,
+            )
+            .order_by(ComputationRunLog.started_at.desc())
+            .limit(limit)
+        )
+        try:
+            async with self._session.begin() as session:
+                result = await session.execute(statement)
+                return [dict(row) for row in result.mappings().all()]
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise MetricsStoreUnavailable(type(error).__name__) from error
+
 
 __all__ = ["MetricsRepository"]

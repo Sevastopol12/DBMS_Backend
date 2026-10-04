@@ -3,10 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
+from numbers import Real
 from typing import Any
+from uuid import UUID
 
 import pandas as pd
 from sqlalchemy import func, select
@@ -36,6 +40,32 @@ from backend.timezone import now_utc
 logger = logging.getLogger(__name__)
 
 PIPELINE_VERSION = "1"
+_REPORT_COLUMNS = tuple(SystemReport.__table__.columns)
+
+
+@dataclass(frozen=True)
+class ComputeOutcome:
+    status: str
+    computation_run_id: UUID | None = None
+    rows_processed: int | None = None
+
+
+def _ensure_finite_metrics(value: Any) -> None:
+    """Reject non-finite numeric values before a result reaches persistence."""
+
+    if isinstance(value, bool) or value is None:
+        return
+    if isinstance(value, Real):
+        if not math.isfinite(value):
+            raise ValueError("non-finite metric value")
+        return
+    if isinstance(value, dict):
+        for nested in value.values():
+            _ensure_finite_metrics(nested)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for nested in value:
+            _ensure_finite_metrics(nested)
 
 
 def compute_fingerprint(
@@ -228,7 +258,7 @@ class ComputeProcessor:
         self._pipeline = pipeline or ComputationPipeline()
         self._metrics_cache = metrics_cache
 
-    async def run(self, *, force: bool = False) -> None:
+    async def run(self, *, force: bool = False) -> ComputeOutcome:
         """Compute and atomically publish one append-only metrics run."""
 
         started = time.monotonic()
@@ -242,13 +272,13 @@ class ComputeProcessor:
             and fingerprint == await self._repository.last_succeeded_fingerprint()
         ):
             logger.info("metrics unchanged, skipping")
-            return
+            return ComputeOutcome("SKIPPED_UNCHANGED")
 
         try:
             run_id = await self._repository.start_run(fingerprint)
         except MetricsRunInProgress:
             logger.info("metrics already running")
-            return
+            return ComputeOutcome("SKIPPED_IN_PROGRESS")
 
         logger.info("compute run started run_id=%s", run_id)
         try:
@@ -260,6 +290,14 @@ class ComputeProcessor:
 
             run_at = now_utc()
             result = self._pipeline.compute(report_df, files_df, run_at)
+            _ensure_finite_metrics(
+                (
+                    result.period_summary_rows,
+                    result.comorbidity_rows,
+                    result.patient_state_rows,
+                    result.data_quality_rows,
+                )
+            )
             await self._repository.publish_run(
                 run_id,
                 result,
@@ -313,6 +351,15 @@ class ComputeProcessor:
             result.rows_processed,
             time.monotonic() - started,
         )
+        return ComputeOutcome(
+            "SUCCEEDED", computation_run_id=run_id, rows_processed=result.rows_processed
+        )
 
 
-__all__ = ["PIPELINE_VERSION", "ComputeProcessor", "compute_fingerprint"]
+__all__ = [
+    "PIPELINE_VERSION",
+    "_REPORT_COLUMNS",
+    "ComputeOutcome",
+    "ComputeProcessor",
+    "compute_fingerprint",
+]

@@ -1,6 +1,7 @@
 import asyncio
 import os
 from dataclasses import dataclass
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from sqlalchemy import text
@@ -49,10 +50,20 @@ def task_pool_settings() -> PoolSettings:
     )
 
 
+def prepared_statements_enabled() -> bool:
+    """Return True unless DB_PREPARED_STATEMENTS is explicitly "off"."""
+
+    return os.getenv("DB_PREPARED_STATEMENTS", "on").strip().lower() != "off"
+
+
+def _unique_prepared_statement_name() -> str:
+    return f"__asyncpg_{uuid4()}__"
+
+
 def create_connection(
     db_level: str, *, pool: PoolSettings | None = None, app_name: str | None = None
 ) -> RDBAsyncConnectionConfig:
-    engine_kwargs = {}
+    engine_kwargs: dict = {}
     if pool is not None:
         engine_kwargs.update(
             pool_size=pool.pool_size,
@@ -61,10 +72,21 @@ def create_connection(
             pool_recycle=pool.pool_recycle,
             pool_pre_ping=pool.pre_ping,
         )
+
+    connect_args: dict = {}
     if app_name is not None:
-        engine_kwargs["connect_args"] = {
-            "server_settings": {"application_name": app_name}
-        }
+        connect_args["server_settings"] = {"application_name": app_name}
+    if not prepared_statements_enabled():
+        # Transaction poolers (PgBouncer/Neon -pooler / Supabase 6543) cannot
+        # reuse named prepared statements across clients. Disable both the
+        # SQLAlchemy asyncpg cache and asyncpg's own statement cache, and use
+        # unique statement names (verified against SQLAlchemy 2.0.52 asyncpg
+        # dialect + asyncpg 0.31 connect signature).
+        connect_args["prepared_statement_cache_size"] = 0
+        connect_args["statement_cache_size"] = 0
+        connect_args["prepared_statement_name_func"] = _unique_prepared_statement_name
+    if connect_args:
+        engine_kwargs["connect_args"] = connect_args
 
     async_engine: AsyncEngine = create_async_engine(
         url=os.getenv(f"{db_level.upper()}_RDB_URL"), **engine_kwargs

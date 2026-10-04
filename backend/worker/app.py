@@ -3,7 +3,7 @@ import logging
 import os
 
 from celery import Celery
-from celery.signals import worker_init, worker_shutdown
+from celery.signals import setup_logging, worker_init, worker_shutdown
 from sqlalchemy.engine import make_url
 
 from .resources import (
@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 celery = Celery("celery")
 
 celery.config_from_object("backend.worker.config")
+
+
+@setup_logging.connect
+def _configure_celery_logging(*args, **kwargs):
+    from backend.logging_config import configure_logging
+
+    configure_logging(os.getenv("SERVICE_NAME", "worker"))
 
 
 def _database_target(env_name: str) -> str:

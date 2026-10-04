@@ -82,13 +82,14 @@ class IngestionService:
 
             return _serialize_ingestion(complete) if complete else None
 
-        except Exception as exc:
+        except Exception:
             await self._repository.update(
                 data.id,
                 {
                     "status": FileStatus.ERROR,
                     "error_code": "INTERNAL_ERROR",
-                    "error_message": str(exc),
+                    "error_message": "Upload completion failed",
+                    "last_error_at": now_vietnam(),
                 },
             )
             raise
