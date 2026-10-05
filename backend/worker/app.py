@@ -5,6 +5,7 @@ import os
 from celery import Celery
 from celery.signals import setup_logging, worker_init, worker_shutdown
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 from .resources import (
     close_worker_redis,
@@ -32,7 +33,7 @@ def _database_target(env_name: str) -> str:
         return f"{env_name} host=(unset) db=(unset)"
     try:
         parsed = make_url(raw_url)
-    except Exception:
+    except ArgumentError:
         return f"{env_name} host=(invalid) db=(invalid)"
     host = parsed.host or "(unset)"
     port = f" port={parsed.port}" if parsed.port is not None else ""
@@ -44,7 +45,7 @@ def _database_target(env_name: str) -> str:
 def _probe_worker_on_init(sender=None, **kwargs):
     try:
         asyncio.run(probe_worker_dependencies())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - boot must fail on any probe error
         logger.critical(
             "Celery worker dependency probe failed; stopping worker (%s, %s; %s)",
             _database_target("STAGING_RDB_URL"),

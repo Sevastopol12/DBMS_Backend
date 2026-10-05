@@ -46,7 +46,7 @@ async def _compute_metrics(
                     TriggerType(trigger).value,
                     celery_task_id=celery_task_id,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - run log bookkeeping must not fail task
                 logger.warning("computation workflow run start failed error=%s", type(exc).__name__)
 
         try:
@@ -64,7 +64,7 @@ async def _compute_metrics(
                         error_code="COMPUTATION_FAILED",
                         error_message=type(exc).__name__,
                     )
-                except Exception as finish_error:
+                except Exception as finish_error:  # noqa: BLE001 - run log bookkeeping must not fail task
                     logger.warning(
                         "computation workflow run finish failed error=%s",
                         type(finish_error).__name__,
@@ -86,7 +86,7 @@ async def _compute_metrics(
                     details=details,
                     computation_run_id=outcome.computation_run_id,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - run log bookkeeping must not fail task
                 logger.warning("computation workflow run finish failed error=%s", type(exc).__name__)
 
 

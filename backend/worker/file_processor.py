@@ -93,7 +93,7 @@ class FileProcessor:
                     mapping_source=mapping_source_value,
                 )
                 return
-            except Exception:
+            except Exception:  # noqa: BLE001 - unexpected exception maps to UNEXPECTED_TRANSFORM_ERROR
                 await self._fail(file_id, error_codes.UNEXPECTED_TRANSFORM_ERROR)
                 return
 
@@ -164,7 +164,7 @@ class FileProcessor:
             )
             try:
                 await self._fail(file_id, error_codes.UNEXPECTED_ERROR)
-            except Exception as fail_exc:
+            except Exception as fail_exc:  # noqa: BLE001 - must not mask original failure
                 logger.error(
                     "file_id=%s fail_exception=%s", file_id, type(fail_exc).__name__
                 )
@@ -180,7 +180,7 @@ class FileProcessor:
     ) -> None:
         try:
             deleted_reports, _deleted_reviews = await self._production.purge_file(file_id)
-        except Exception:
+        except Exception:  # noqa: BLE001 - purge failure maps to PERSISTENCE_FAILED
             await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
             return
         report.metadata.update(

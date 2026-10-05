@@ -52,8 +52,6 @@ def parse_measurement(raw) -> tuple[Decimal, str | None] | None:
         return value, unit
     except (InvalidOperation, ValueError, TypeError, OverflowError):
         return None
-    except Exception:
-        return None
 
 
 def glucose_to_mmol(raw) -> Decimal | None:
@@ -70,7 +68,7 @@ def glucose_to_mmol(raw) -> Decimal | None:
             converted = value / Decimal("18.016")
             return converted if converted.is_finite() else None
         return None
-    except Exception:
+    except (ArithmeticError, TypeError, ValueError):
         return None
 
 
@@ -95,7 +93,7 @@ def check_numeric(field, raw) -> Issue | None:
         if not lower <= value <= upper:
             return Issue("INVALID", f"OUT_OF_RANGE_{field.upper()}")
         return None
-    except Exception:
+    except (ArithmeticError, IndexError, KeyError, TypeError, ValueError):
         return Issue("INVALID", f"OUT_OF_RANGE_{str(field).upper()}")
 
 
@@ -112,7 +110,7 @@ def check_birth_year(year: int, reference_date: date) -> Issue | None:
         if not lower <= year <= reference_date.year:
             return Issue("INVALID", "BIRTH_YEAR_OUT_OF_RANGE")
         return None
-    except Exception:
+    except (ArithmeticError, AttributeError, KeyError, TypeError, ValueError):
         return Issue("INVALID", "BIRTH_YEAR_OUT_OF_RANGE")
 
 
@@ -129,7 +127,7 @@ def check_visit_date(visit: date, reference_date: date) -> Issue | None:
         if not lower <= visit <= reference_date + timedelta(days=1):
             return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
         return None
-    except Exception:
+    except (ArithmeticError, AttributeError, KeyError, TypeError, ValueError):
         return Issue("INVALID", "VISIT_DATE_OUT_OF_RANGE")
 
 
@@ -148,7 +146,7 @@ def check_person_name(text) -> Issue | None:
         if sum(character.isalpha() for character in text) < 2:
             return Issue("SUSPICIOUS", "NAME_TOO_SHORT")
         return None
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return Issue("SUSPICIOUS", "NAME_INVALID_CHARS")
 
 
@@ -166,7 +164,7 @@ def check_icd_family(field, codes: str) -> Issue | None:
             if expected == "E" and token[1:3] == "15":
                 return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
         return None
-    except Exception:
+    except (AttributeError, IndexError, TypeError, ValueError):
         return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
 
 

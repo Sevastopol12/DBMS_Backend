@@ -21,7 +21,7 @@ class MetricsCache:
             return None if value is None else json.loads(
                 value, parse_constant=_reject_nonstandard_constant
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "Redis metrics cache unavailable during get key=%s error=%s",
                 key,
@@ -41,7 +41,7 @@ class MetricsCache:
                 self.client.set(key, serialized)
             else:
                 self.client.set(key, serialized, ex=ttl_seconds)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "Redis metrics cache unavailable during set key=%s error=%s",
                 key,
@@ -54,7 +54,7 @@ class MetricsCache:
             return
         try:
             self.client.delete(*key_list)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "Redis metrics cache unavailable during delete keys=%s error=%s",
                 len(key_list),
@@ -67,7 +67,7 @@ class MetricsCache:
                 key.decode() if isinstance(key, bytes) else str(key)
                 for key in self.client.scan_iter(match=f"{prefix}*")
             ]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "Redis metrics cache unavailable during scan prefix=%s error=%s",
                 prefix,
