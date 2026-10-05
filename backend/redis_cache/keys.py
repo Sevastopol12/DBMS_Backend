@@ -17,12 +17,6 @@ METRICS_CACHE_PREFIXES = (
 )
 
 
-def facility_scope(scope: str) -> str:
-    """Return an already-normalized scope token unchanged."""
-
-    return scope
-
-
 def period_summary_key(scope: str, grain: str) -> str:
     return f"{PERIOD_SUMMARY_PREFIX}{scope}:{grain}"
 
@@ -101,7 +95,6 @@ __all__ = [
     "PERIOD_SUMMARY_PREFIX",
     "comorbidity_key",
     "data_quality_key",
-    "facility_scope",
     "out_of_control_key",
     "period_summary_key",
     "sort_comorbidity",
