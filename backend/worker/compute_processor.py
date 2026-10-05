@@ -231,7 +231,7 @@ def _canonical_result(result: ComputationResult, computed_at: datetime) -> Compu
 def _write_cache_value(cache: MetricsCache, key: str, value: object) -> None:
     try:
         cache.set(key, value, ttl_seconds=METRICS_CACHE_TTL_SECONDS)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
         logger.warning(
             "metrics cache write failed key=%s error=%s",
             key,
@@ -308,7 +308,7 @@ def _write_metrics_cache(
             stale = [key for key in scan_keys(prefix) if key not in written]
             if stale:
                 delete_many(stale)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
             logger.warning(
                 "metrics cache prune failed prefix=%s error=%s",
                 prefix,
@@ -399,7 +399,7 @@ class ComputeProcessor:
                     "FAILED",
                     error_message=error_message,
                 )
-            except Exception as finish_error:
+            except Exception as finish_error:  # noqa: BLE001 - must not mask original failure
                 logger.warning(
                     "compute run failure update failed run_id=%s error=%s",
                     run_id,
@@ -410,7 +410,7 @@ class ComputeProcessor:
         if self._metrics_cache is not None:
             try:
                 _write_metrics_cache(self._metrics_cache, result, run_at)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
                 logger.warning(
                     "metrics cache write failed run_id=%s error=%s",
                     run_id,
@@ -419,7 +419,7 @@ class ComputeProcessor:
 
         try:
             await self._repository.prune(keep=10)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
             logger.warning(
                 "metrics run prune failed run_id=%s error=%s",
                 run_id,

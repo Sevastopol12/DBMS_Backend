@@ -50,7 +50,7 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         stack.push_async_callback(dispose_connection, application)
         try:
             await probe_connection(application)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - startup probe: metrics db fails open
             logger.warning(
                 "metrics database unavailable during API startup: %s",
                 type(exc).__name__,
@@ -66,7 +66,7 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         try:
             redis_client.ping()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - startup probe: redis cache fails open
             logger.warning(
                 "Redis cache unavailable during API startup: %s",
                 type(exc).__name__,

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import Depends, Request
 
 from backend.api.metrics_service import MetricsService
@@ -14,52 +16,92 @@ def get_resources(request: Request) -> ApiResources:
     return request.app.state.resources
 
 
+ResourcesDep = Annotated[ApiResources, Depends(get_resources)]
+
+
 def get_ingestion_repository(
-    res: ApiResources = Depends(get_resources),
+    res: ResourcesDep,
 ) -> IngestionRepository:
     return IngestionRepository(config=res.staging)
 
 
+IngestionRepositoryDep = Annotated[
+    IngestionRepository, Depends(get_ingestion_repository)
+]
+
+
 def get_storage_service(
-    res: ApiResources = Depends(get_resources),
+    res: ResourcesDep,
 ) -> StorageService:
     return StorageService(config=res.storage)
 
 
-def get_mapping_cache(res: ApiResources = Depends(get_resources)) -> MappingCache:
+StorageServiceDep = Annotated[StorageService, Depends(get_storage_service)]
+
+
+def get_mapping_cache(res: ResourcesDep) -> MappingCache:
     return MappingCache(res.redis)
 
 
-def get_metrics_cache(res: ApiResources = Depends(get_resources)) -> MetricsCache:
+MappingCacheDep = Annotated[MappingCache, Depends(get_mapping_cache)]
+
+
+def get_metrics_cache(res: ResourcesDep) -> MetricsCache:
     return MetricsCache(res.redis)
 
 
+MetricsCacheDep = Annotated[MetricsCache, Depends(get_metrics_cache)]
+
+
 def get_metrics_repository(
-    res: ApiResources = Depends(get_resources),
+    res: ResourcesDep,
 ) -> MetricsRepository:
     return MetricsRepository(config=res.application)
 
 
+MetricsRepositoryDep = Annotated[MetricsRepository, Depends(get_metrics_repository)]
+
+
 def get_metrics_service(
-    cache: MetricsCache = Depends(get_metrics_cache),
-    repository: MetricsRepository = Depends(get_metrics_repository),
+    cache: MetricsCacheDep,
+    repository: MetricsRepositoryDep,
 ) -> MetricsService:
     return MetricsService(cache=cache, repository=repository)
 
 
+MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
+
+
 def get_workflow_repository(
-    res: ApiResources = Depends(get_resources),
+    res: ResourcesDep,
 ) -> WorkflowRunRepository:
     return WorkflowRunRepository(config=res.staging)
 
 
+WorkflowRunRepositoryDep = Annotated[
+    WorkflowRunRepository, Depends(get_workflow_repository)
+]
+
+
 def get_report_repository(
-    res: ApiResources = Depends(get_resources),
+    res: ResourcesDep,
 ) -> ReportRepository:
     return ReportRepository(config=res.application)
 
 
+ReportRepositoryDep = Annotated[ReportRepository, Depends(get_report_repository)]
+
+
 __all__ = [
+    "IngestionRepositoryDep",
+    "MappingCacheDep",
+    "MetricsCacheDep",
+    "MetricsRepositoryDep",
+    "MetricsServiceDep",
+    "ReportRepositoryDep",
+    "ResourcesDep",
+    "StorageServiceDep",
+    "WorkflowRunRepositoryDep",
     "get_ingestion_repository",
     "get_mapping_cache",
     "get_metrics_cache",

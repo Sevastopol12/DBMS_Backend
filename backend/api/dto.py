@@ -168,7 +168,7 @@ def to_metrics_scope(
             raise ValueError("rollup scope is invalid for patient state")
         return MetricsScope.rollup()
     if isinstance(facility_id, str):
-        raise ValueError("facility_id must be ALL or a UUID")
+        raise ValueError("facility_id must be ALL or a UUID")  # noqa: TRY004 - validation failure contract is ValueError
     return MetricsScope.facility(facility_id)
 
 

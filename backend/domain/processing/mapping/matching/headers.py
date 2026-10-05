@@ -153,7 +153,6 @@ def match_attempt(
     del samples
     column = _source_column(header)
     source_name = normalize_header(column.original_name)
-    catalog = catalog
 
     explicit = _explicit_for(column, explicit_map)
     if explicit is not None:
@@ -198,7 +197,6 @@ def match_headers(
     catalog: MappingCatalog,
 ) -> tuple[list[ResolvedHeader], list[ColumnMap], list[ColumnMap]]:
     """Batch adapter around ``match_attempt`` for the ingestion engine."""
-    catalog = catalog
     resolved: list[ResolvedHeader] = []
     ambiguous: list[ColumnMap] = []
     unmapped: list[ColumnMap] = []

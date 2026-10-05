@@ -15,6 +15,30 @@ from backend.timezone import VIETNAM_TZ, ensure_vietnam_aware
 
 from .lexical import clean_optional_text
 
+_DATE_FORMATS = (
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%Y/%m/%d",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y %H:%M:%S",
+    "%d-%m-%Y %H:%M",
+    "%d-%m-%Y %H:%M:%S",
+    "%Y/%m/%d %H:%M",
+    "%Y/%m/%d %H:%M:%S",
+)
+
+_DATETIME_FORMATS = (
+    "%d/%m/%Y",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y %H:%M:%S",
+    "%d-%m-%Y",
+    "%d-%m-%Y %H:%M",
+    "%d-%m-%Y %H:%M:%S",
+    "%Y/%m/%d",
+    "%Y/%m/%d %H:%M",
+    "%Y/%m/%d %H:%M:%S",
+)
+
 
 def normalize_text(value: Any, *, collapse_whitespace: bool = True) -> str | None:
     """Trim text and, when requested, reduce runs of whitespace to one space."""
@@ -41,12 +65,21 @@ def normalize_date(value: Any) -> str | None:
         number = float(value)
         if number.is_integer() and 10_000_000 <= number <= 99_999_999:
             try:
-                return datetime.strptime(str(int(number)), "%Y%m%d").date().isoformat()
+                return (
+                    datetime.strptime(str(int(number)), "%Y%m%d")
+                    .replace(tzinfo=VIETNAM_TZ)
+                    .date()
+                    .isoformat()
+                )
             except ValueError:
                 return None
         if 1 <= number <= 60_000:
             try:
-                return (datetime(1899, 12, 30) + timedelta(days=number)).date().isoformat()
+                return (
+                    (datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(days=number))
+                    .date()
+                    .isoformat()
+                )
             except (OverflowError, ValueError):
                 return None
     text = normalize_text(value)
@@ -54,23 +87,26 @@ def normalize_date(value: Any) -> str | None:
         return None
     if re.fullmatch(r"\d{8}", text):
         try:
-            return datetime.strptime(text, "%Y%m%d").date().isoformat()
+            return (
+                datetime.strptime(text, "%Y%m%d")
+                .replace(tzinfo=VIETNAM_TZ)
+                .date()
+                .isoformat()
+            )
         except ValueError:
             return None
-    for parser in (
-        date.fromisoformat,
-        lambda candidate: datetime.strptime(candidate, "%d/%m/%Y").date(),
-        lambda candidate: datetime.strptime(candidate, "%d-%m-%Y").date(),
-        lambda candidate: datetime.strptime(candidate, "%Y/%m/%d").date(),
-        lambda candidate: datetime.strptime(candidate, "%d/%m/%Y %H:%M").date(),
-        lambda candidate: datetime.strptime(candidate, "%d/%m/%Y %H:%M:%S").date(),
-        lambda candidate: datetime.strptime(candidate, "%d-%m-%Y %H:%M").date(),
-        lambda candidate: datetime.strptime(candidate, "%d-%m-%Y %H:%M:%S").date(),
-        lambda candidate: datetime.strptime(candidate, "%Y/%m/%d %H:%M").date(),
-        lambda candidate: datetime.strptime(candidate, "%Y/%m/%d %H:%M:%S").date(),
-    ):
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError:
+        pass
+    for fmt in _DATE_FORMATS:
         try:
-            return parser(text).isoformat()
+            return (
+                datetime.strptime(text, fmt)
+                .replace(tzinfo=VIETNAM_TZ)
+                .date()
+                .isoformat()
+            )
         except ValueError:
             continue
     return None
@@ -93,7 +129,7 @@ def normalize_datetime(value: Any) -> datetime | None:
                 except ValueError:
                     return None
             if 1 <= number <= 60_000:
-                return (datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(days=number))
+                return datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(days=number)
 
         text = normalize_text(value)
         if text is None:
@@ -103,23 +139,16 @@ def normalize_datetime(value: Any) -> datetime | None:
                 return datetime.strptime(text, "%Y%m%d").replace(tzinfo=VIETNAM_TZ)
             except ValueError:
                 return None
-        for parser in (
-            datetime.fromisoformat,
-            lambda candidate: datetime.strptime(candidate, "%d/%m/%Y"),
-            lambda candidate: datetime.strptime(candidate, "%d/%m/%Y %H:%M"),
-            lambda candidate: datetime.strptime(candidate, "%d/%m/%Y %H:%M:%S"),
-            lambda candidate: datetime.strptime(candidate, "%d-%m-%Y"),
-            lambda candidate: datetime.strptime(candidate, "%d-%m-%Y %H:%M"),
-            lambda candidate: datetime.strptime(candidate, "%d-%m-%Y %H:%M:%S"),
-            lambda candidate: datetime.strptime(candidate, "%Y/%m/%d"),
-            lambda candidate: datetime.strptime(candidate, "%Y/%m/%d %H:%M"),
-            lambda candidate: datetime.strptime(candidate, "%Y/%m/%d %H:%M:%S"),
-        ):
+        try:
+            return ensure_vietnam_aware(datetime.fromisoformat(text))
+        except ValueError:
+            pass
+        for fmt in _DATETIME_FORMATS:
             try:
-                return ensure_vietnam_aware(parser(text))
+                return datetime.strptime(text, fmt).replace(tzinfo=VIETNAM_TZ)
             except ValueError:
                 continue
-    except Exception:
+    except (ArithmeticError, TypeError, ValueError):
         return None
     return None
 
