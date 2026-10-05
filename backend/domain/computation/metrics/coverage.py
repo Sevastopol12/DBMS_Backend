@@ -8,23 +8,23 @@ from typing import Any
 
 import pandas as pd
 
-from ..bucketing import to_local_naive
+from ..periods import to_local_naive
 
 
-def _non_null_keys(frame: pd.DataFrame) -> pd.Series:
-    if "patient_key" in frame:
-        return frame["patient_key"].dropna().astype(str)
-    return pd.Series(frame.index.astype(str), index=frame.index)
+def _keys(frame: pd.DataFrame) -> pd.Series:
+    if "patient_key" not in frame:
+        return pd.Series(dtype="string", index=frame.index)
+    keys = frame["patient_key"].astype("string")
+    return keys.loc[keys.notna() & keys.ne("nan")]
 
 
 def _as_timestamp(value: Any) -> pd.Timestamp | None:
     if value is None:
         return None
-    parsed = pd.to_datetime(value, errors="coerce")
+    parsed = pd.to_datetime(value, errors="coerce", format="mixed")
     if pd.isna(parsed):
         return None
-    timestamp = pd.Timestamp(parsed)
-    return to_local_naive(timestamp)
+    return pd.Timestamp(to_local_naive(pd.Timestamp(parsed)))
 
 
 def compute_coverage(
@@ -34,32 +34,33 @@ def compute_coverage(
     period_start: datetime | pd.Timestamp | None = None,
     period_end: datetime | pd.Timestamp | None = None,
 ) -> dict[str, int | float | None]:
-    """Compute visit/unique/new-returning counts for one period slice."""
+    """Compute counts for one half-open period slice."""
 
-    keys = _non_null_keys(frame)
+    keys = _keys(frame)
     unique_keys = set(keys.tolist())
-    visit_count = len(frame)
     unique_count = len(unique_keys)
     first_dates = first_visit_dates or {}
     start = _as_timestamp(period_start)
     end = _as_timestamp(period_end)
-    new_count = 0
 
+    new_count = 0
     if start is not None:
         for key in unique_keys:
-            first = _as_timestamp(first_dates.get(key))
-            if first is not None and (
-                (end is not None and start <= first < end)
-                or (end is None and first == start)
-            ):
+            first = _as_timestamp(first_dates.get(str(key)))
+            if first is not None and (end is None or first < end) and first >= start:
                 new_count += 1
-    else:
-        new_count = unique_count
+
+    returning_count = 0
+    if unique_count and "patient_key" in frame:
+        counts = keys.value_counts()
+        returning_count = int((counts >= 2).sum())
 
     return {
-        "visit_count": visit_count,
+        "visit_count": len(frame),
         "unique_patient_count": unique_count,
         "new_patient_count": new_count,
-        "returning_patient_count": unique_count - new_count,
-        "repeat_visit_ratio": visit_count / unique_count if unique_count else None,
+        "returning_patient_count": returning_count,
+        "repeat_visit_ratio": (
+            returning_count / unique_count if unique_count else None
+        ),
     }

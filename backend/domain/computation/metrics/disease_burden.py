@@ -9,45 +9,52 @@ import pandas as pd
 from backend.domain.processing.transformation.normalization import normalized_token
 
 
-def _patient_key(row: pd.Series, fallback: object) -> str:
-    value = row.get("patient_key")
-    return str(value) if pd.notna(value) else str(fallback)
+def _present_series(frame: pd.DataFrame, field: str) -> pd.Series:
+    if field not in frame:
+        return pd.Series(False, index=frame.index, dtype=bool)
+    values = frame[field]
+    return values.notna() & values.astype(str).str.strip().ne("") & values.astype(str).ne("nan")
 
 
-def _present(value: object) -> bool:
-    if value is None:
-        return False
-    try:
-        return not bool(pd.isna(value)) and bool(str(value).strip())
-    except (TypeError, ValueError):
-        return bool(str(value).strip())
+def _patient_series(frame: pd.DataFrame) -> pd.Series:
+    if "patient_key" in frame:
+        values = frame["patient_key"].astype("string")
+        return values.where(values.notna() & values.ne("nan"), frame.index.astype(str))
+    return pd.Series(frame.index.astype(str), index=frame.index, dtype="string")
 
 
 def compute_disease_burden(frame: pd.DataFrame) -> dict[str, float | None]:
-    """Return THA/diabetes/comorbidity percentages over unique patients."""
+    """Return distinct-patient disease percentages for codes in this slice."""
 
-    patient_flags: dict[str, list[bool]] = {}
-    for index, row in frame.iterrows():
-        key = _patient_key(row, index)
-        flags = patient_flags.setdefault(key, [False, False])
-        flags[0] |= _present(row.get("icd_tha"))
-        flags[1] |= _present(row.get("icd_dtd"))
-
-    if not patient_flags:
+    if frame.empty:
         return {"pct_tha": None, "pct_dtd": None, "pct_comorbid": None}
-    total = len(patient_flags)
-    tha = sum(flags[0] for flags in patient_flags.values())
-    dtd = sum(flags[1] for flags in patient_flags.values())
-    comorbid = sum(flags[0] and flags[1] for flags in patient_flags.values())
+    grouped = pd.DataFrame(
+        {
+            "patient_key": _patient_series(frame),
+            "tha": _present_series(frame, "icd_tha").to_numpy(),
+            "dtd": _present_series(frame, "icd_dtd").to_numpy(),
+        },
+        index=frame.index,
+    ).groupby("patient_key", sort=False)[["tha", "dtd"]].any()
+    total = len(grouped)
+    if not total:
+        return {"pct_tha": None, "pct_dtd": None, "pct_comorbid": None}
     return {
-        "pct_tha": tha / total,
-        "pct_dtd": dtd / total,
-        "pct_comorbid": comorbid / total,
+        "pct_tha": float(grouped["tha"].sum() / total),
+        "pct_dtd": float(grouped["dtd"].sum() / total),
+        "pct_comorbid": float((grouped["tha"] & grouped["dtd"]).sum() / total),
     }
 
 
 def _diagnosis_tokens(value: object) -> list[str]:
-    if not _present(value):
+    if value is None:
+        return []
+    try:
+        if bool(pd.isna(value)):
+            return []
+    except (TypeError, ValueError):
+        pass
+    if not str(value).strip():
         return []
     normalized = normalized_token(value) or ""
     return [
@@ -58,17 +65,16 @@ def _diagnosis_tokens(value: object) -> list[str]:
 
 
 def compute_comorbidity_breakdown(frame: pd.DataFrame) -> list[dict[str, object]]:
-    """Count distinct patients per heuristic comorbidity token.
+    """Count distinct patients per heuristic comorbidity token."""
 
-    This tokenization is heuristic, not authoritative: ``chan_doan_di_kem``
-    is free text and is not a controlled diagnosis vocabulary.
-    """
-
+    if frame.empty:
+        return []
+    keys = _patient_series(frame).tolist()
+    values = frame["chan_doan_di_kem"].tolist() if "chan_doan_di_kem" in frame else [None] * len(frame)
     patients_by_label: dict[str, set[str]] = {}
-    for index, row in frame.iterrows():
-        key = _patient_key(row, index)
-        for label in set(_diagnosis_tokens(row.get("chan_doan_di_kem"))):
-            patients_by_label.setdefault(label, set()).add(key)
+    for key, value in zip(keys, values, strict=False):
+        for label in set(_diagnosis_tokens(value)):
+            patients_by_label.setdefault(label, set()).add(str(key))
     return [
         {"diagnosis_label": label, "patient_count": len(patients)}
         for label, patients in sorted(patients_by_label.items())

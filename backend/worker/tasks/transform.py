@@ -16,7 +16,7 @@ from ..resources import task_resources
 
 @celery.task(name="backend.worker.tasks.transform.transform")
 def transform(task_id: UUID):
-    run(_transform(task_id))
+    run(_transform(UUID(str(task_id))))
 
 
 async def _transform(task_id: UUID):

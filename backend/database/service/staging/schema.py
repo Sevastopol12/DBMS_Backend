@@ -1,8 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
@@ -14,6 +15,7 @@ class FileInfo(Base):
     __tablename__ = "ingestion_files"
     __table_args__ = (
         UniqueConstraint("content_hash", name="ingestion_files_content_hash_unique"),
+        Index("ingestion_files_status_idx", "status"),
         {"schema": "Files"},
     )
 
@@ -53,6 +55,17 @@ class FileInfo(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     accepted_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Wave 1A additions (CONTRACTS §3)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    last_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    queued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 __all__ = ["FileInfo"]

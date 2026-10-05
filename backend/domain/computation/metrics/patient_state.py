@@ -7,8 +7,12 @@ from typing import Any
 
 import pandas as pd
 
-from ..bucketing import localize_local, to_local_naive
-from .clinical_control import _glucose, _measurement
+from ..periods import localize_local, to_local_naive
+from .clinical_control import (
+    bp_is_controlled,
+    classify_bp,
+    parse_measurements,
+)
 
 
 def _missing(value: Any) -> bool:
@@ -24,26 +28,23 @@ def _text(value: Any) -> str | None:
     return None if _missing(value) else str(value)
 
 
-def _valid_patient_key(value: Any) -> bool:
-    if _missing(value):
-        return False
-    return str(value).strip().lower() != "nan"
+def _valid_key(value: Any) -> bool:
+    return not _missing(value) and str(value).strip().lower() != "nan"
 
 
-def _latest_flags(
-    systolic: float | None,
-    diastolic: float | None,
-    hba1c: float | None,
-) -> tuple[bool | None, bool | None, bool | None, bool | None]:
-    bp_controlled = None
-    bp_crisis = None
-    if systolic is not None and diastolic is not None:
-        bp_controlled = systolic < 140 and diastolic < 90
-        bp_crisis = systolic > 180 or diastolic > 120
-    hba1c_controlled = None if hba1c is None else hba1c < 7
-    checks = [flag for flag in (bp_controlled, hba1c_controlled) if flag is not None]
-    out_of_control = any(not flag for flag in checks) if checks else None
-    return bp_controlled, bp_crisis, hba1c_controlled, out_of_control
+def _ordered(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    result["_row_order"] = range(len(result))
+    date_key = "ngay_kham" if "ngay_kham" in result else "_row_order"
+    id_key = "id" if "id" in result else "_row_order"
+    return result.sort_values([date_key, id_key, "_row_order"], kind="stable", na_position="first")
+
+
+def _latest_valid(history: pd.DataFrame, columns: list[str]) -> pd.Series | None:
+    valid = history.dropna(subset=columns)
+    if valid.empty:
+        return None
+    return _ordered(valid).iloc[-1]
 
 
 def build_patient_state(
@@ -51,33 +52,50 @@ def build_patient_state(
     *,
     run_at: datetime,
 ) -> list[dict[str, Any]]:
-    """Build one latest-visit state row per patient key."""
+    """Build one row per patient with latest valid value per measure."""
 
     if frame.empty or "patient_key" not in frame:
         return []
-    work = frame.copy()
-    work = work.loc[work["patient_key"].map(_valid_patient_key)].copy()
+    work = frame.loc[frame["patient_key"].map(_valid_key)].copy()
     if work.empty:
         return []
-    work["_visit_sort"] = to_local_naive(
-        pd.to_datetime(work.get("ngay_kham"), errors="coerce", format="mixed")
-    )
-    work = work.sort_values("_visit_sort", kind="stable")
+    if not {"_systolic", "_diastolic", "_hba1c", "_glucose"}.issubset(work):
+        work = parse_measurements(work)
+    if "ngay_kham" in work and not pd.api.types.is_datetime64_any_dtype(work["ngay_kham"]):
+        work["ngay_kham"] = to_local_naive(
+            pd.to_datetime(work["ngay_kham"], errors="coerce", format="mixed")
+        )
+
     rows: list[dict[str, Any]] = []
     for patient_key, history in work.groupby("patient_key", sort=True, dropna=False):
-        latest = history.iloc[-1]
+        ordered = _ordered(history)
+        latest = ordered.iloc[-1]
+        pair = _latest_valid(history, ["_systolic", "_diastolic"])
+        hba1c = _latest_valid(history, ["_hba1c"])
+        glucose = _latest_valid(history, ["_glucose"])
+
+        systolic = None if pair is None else float(pair["_systolic"])
+        diastolic = None if pair is None else float(pair["_diastolic"])
+        last_hba1c = None if hba1c is None else float(hba1c["_hba1c"])
+        last_glucose = None if glucose is None else float(glucose["_glucose"])
+        bp_controlled = (
+            None
+            if pair is None
+            else bp_is_controlled(systolic, diastolic)
+        )
+        bp_severe = (
+            None
+            if pair is None
+            else classify_bp(systolic, diastolic) == "severe"
+        )
+        hba1c_controlled = None if hba1c is None else last_hba1c < 7
+        known_flags = [flag for flag in (bp_controlled, hba1c_controlled) if flag is not None]
+
+        visit_dates = ordered["ngay_kham"].dropna() if "ngay_kham" in ordered else pd.Series(dtype=object)
+        last_visit = latest.get("ngay_kham")
         facility_id = latest.get("facility_id")
         if _missing(facility_id):
             facility_id = None
-        visit_dates = history["_visit_sort"].dropna()
-        last_visit = latest["_visit_sort"]
-        systolic = _measurement(latest.get("huyet_ap_tam_thu"))
-        diastolic = _measurement(latest.get("huyet_ap_tam_truong"))
-        glucose = _glucose(latest.get("chi_so_duong_huyet"))
-        hba1c = _measurement(latest.get("chi_so_hba1c"))
-        bp_controlled, bp_crisis, hba1c_controlled, out_of_control = _latest_flags(
-            systolic, diastolic, hba1c
-        )
         rows.append(
             {
                 "patient_key": str(patient_key),
@@ -85,23 +103,19 @@ def build_patient_state(
                 "ho_ten": _text(latest.get("ho_ten")),
                 "sdt": _text(latest.get("sdt")),
                 "dia_chi": _text(latest.get("dia_chi")),
-                "last_visit_date": (
-                    None if pd.isna(last_visit) else localize_local(last_visit)
-                ),
+                "last_visit_date": None if _missing(last_visit) else localize_local(last_visit),
                 "last_systolic": systolic,
                 "last_diastolic": diastolic,
-                "last_glucose": glucose,
-                "last_hba1c": hba1c,
+                "last_glucose": last_glucose,
+                "last_hba1c": last_hba1c,
                 "is_bp_controlled": bp_controlled,
-                "is_bp_crisis": bp_crisis,
+                "is_bp_severe": bp_severe,
                 "is_hba1c_controlled": hba1c_controlled,
-                "is_out_of_control": out_of_control,
+                "is_out_of_control": any(not flag for flag in known_flags) if known_flags else None,
                 "has_contact": bool(_text(latest.get("sdt"))),
-                "first_visit_date": (
-                    localize_local(visit_dates.iloc[0]) if len(visit_dates) else None
-                ),
+                "first_visit_date": localize_local(visit_dates.iloc[0]) if len(visit_dates) else None,
                 "visit_count": len(history),
-                "uploaded_date": run_at,
+                "computed_at": run_at,
             }
         )
     return rows

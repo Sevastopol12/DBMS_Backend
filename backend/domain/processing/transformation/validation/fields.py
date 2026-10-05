@@ -37,7 +37,7 @@ from .core import (
 )
 
 _YEAR = re.compile(r"^(18|19|20|21)\d{2}$")
-_ICD = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?$", re.I)
+_ICD = re.compile(r"^[A-Z]\d{2}(?:\.\d{1,4})?$", re.IGNORECASE)
 
 
 def _validate_cccd(
@@ -51,8 +51,8 @@ def _validate_cccd(
     if normalized is not None and normalized.isdigit():
         return ValidationResult(
             state=ValidationState.SUSPICIOUS,
-            issue_code="SUSPICIOUS_CCCD",
             normalized_value=normalized,
+            flags=["SUSPICIOUS_CCCD"],
         )
     return ValidationResult(
         state=ValidationState.INVALID,
@@ -108,9 +108,7 @@ def _validate_birth_year(
         try:
             parsed = datetime.fromisoformat(normalized)
             vietnam_parsed = (
-                parsed.astimezone(VIETNAM_TZ)
-                if parsed.tzinfo is not None
-                else parsed
+                parsed.astimezone(VIETNAM_TZ) if parsed.tzinfo is not None else parsed
             )
             result = ValidationResult(
                 state=ValidationState.VALID,

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, PlainSerializer
 
+from backend.database.service.metrics.scope import MetricsScope
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
 from backend.timezone import VIETNAM_TZ, VIETNAM_TZ_NAME
@@ -37,8 +38,8 @@ class IssueCodeCount(BaseModel):
 
 
 class PeriodSummaryMetric(BaseModel):
-    facility_id: UUID
-    period_grain: str
+    facility_id: UUID | None
+    period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
     visit_count: int
@@ -51,29 +52,30 @@ class PeriodSummaryMetric(BaseModel):
     pct_comorbid: float | None = Field(default=None, allow_inf_nan=False)
     bp_control_rate: float | None = Field(default=None, allow_inf_nan=False)
     bp_stage_normal_count: int
+    bp_stage_elevated_count: int
     bp_stage_1_count: int
     bp_stage_2_count: int
-    bp_stage_crisis_count: int
+    bp_stage_severe_count: int
     glycemic_control_rate: float | None = Field(default=None, allow_inf_nan=False)
     avg_glucose: float | None = Field(default=None, allow_inf_nan=False)
     median_glucose: float | None = Field(default=None, allow_inf_nan=False)
     avg_hba1c: float | None = Field(default=None, allow_inf_nan=False)
     median_hba1c: float | None = Field(default=None, allow_inf_nan=False)
-    uploaded_date: ApiDateTime
+    computed_at: ApiDateTime
 
 
 class ComorbidityMetric(BaseModel):
-    facility_id: UUID
-    period_grain: str
+    facility_id: UUID | None
+    period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     diagnosis_label: str
     patient_count: int
-    uploaded_date: ApiDateTime
+    computed_at: ApiDateTime
 
 
 class PatientStateMetric(BaseModel):
     patient_key: str
-    facility_id: UUID
+    facility_id: UUID | None
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -83,28 +85,28 @@ class PatientStateMetric(BaseModel):
     last_glucose: float | None = Field(default=None, allow_inf_nan=False)
     last_hba1c: float | None = Field(default=None, allow_inf_nan=False)
     is_bp_controlled: bool | None
-    is_bp_crisis: bool | None
+    is_bp_severe: bool | None
     is_hba1c_controlled: bool | None
     is_out_of_control: bool | None
     has_contact: bool
     first_visit_date: ApiDateTime | None
     visit_count: int
-    uploaded_date: ApiDateTime
+    computed_at: ApiDateTime
 
 
 class DataQualityMetric(BaseModel):
-    facility_id: UUID
-    period_grain: str
+    facility_id: UUID | None
+    period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
     files_processed: int
-    avg_coverage_ratio: float | None = Field(default=None, allow_inf_nan=False)
+    avg_mapping_coverage_ratio: float | None = Field(default=None, allow_inf_nan=False)
     total_rows_seen: int
-    accepted_rows: int
-    flagged_rows: int
+    accepted_clean_rows: int
+    accepted_with_flags_rows: int
     rejected_rows: int
     top_issue_codes: list[IssueCodeCount]
-    uploaded_date: ApiDateTime
+    computed_at: ApiDateTime
 
 
 class MetricsStatus(BaseModel):
@@ -144,12 +146,30 @@ class IngestionResponse(BaseModel):
 
 
 class MetricsGrainQuery(BaseModel):
-    grain: Literal["1D", "3D", "1W", "2W", "1M", "ALL"]
-    facility_id: UUID = None
+    grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
+    facility_id: UUID | Literal["ALL"] | None = None
 
 
 class MetricsFacilityQuery(BaseModel):
-    facility_id: UUID = None
+    facility_id: UUID | None = None
+
+
+def to_metrics_scope(
+    facility_id: UUID | Literal["ALL"] | None,
+    *,
+    allow_rollup: bool = True,
+) -> MetricsScope:
+    """Convert the wire-level facility selector to the repository scope."""
+
+    if facility_id is None:
+        return MetricsScope.all_facilities()
+    if facility_id == "ALL":
+        if not allow_rollup:
+            raise ValueError("rollup scope is invalid for patient state")
+        return MetricsScope.rollup()
+    if isinstance(facility_id, str):
+        raise ValueError("facility_id must be ALL or a UUID")
+    return MetricsScope.facility(facility_id)
 
 
 def _get_safe_filename(filename: str) -> str:
@@ -185,15 +205,16 @@ __all__ = [
     "ApiDateTime",
     "ComorbidityMetric",
     "DataQualityMetric",
-    "IngestionCreate",
     "IngestionComplete",
+    "IngestionCreate",
     "IngestionResponse",
     "IssueCodeCount",
-    "MetricsGrainQuery",
     "MetricsFacilityQuery",
+    "MetricsGrainQuery",
     "MetricsStatus",
     "PatientStateMetric",
     "PeriodSummaryMetric",
     "_get_safe_filename",
     "_serialize_ingestion",
+    "to_metrics_scope",
 ]
