@@ -5,9 +5,8 @@ import json
 import logging
 import math
 import time
-from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from numbers import Real
 from typing import Any
 from uuid import UUID
@@ -25,6 +24,7 @@ from backend.domain.computation.pipeline import ComputationPipeline, Computation
 from backend.redis_cache.cache import MetricsCache
 from backend.redis_cache.keys import (
     LAST_COMPUTED_AT_KEY,
+    METRICS_CACHE_PREFIXES,
     METRICS_CACHE_TTL_SECONDS,
     comorbidity_key,
     data_quality_key,
@@ -35,11 +35,38 @@ from backend.redis_cache.keys import (
     sort_out_of_control,
     sort_period_summary,
 )
-from backend.timezone import now_utc
+from backend.timezone import now_utc, start_of_day_vietnam
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "1"
+PIPELINE_VERSION = "2"
+_METRIC_GRAINS = ("3D", "2W", "3M", "6M", "TODAY", "ALL")
+_PERIOD_ROW_KEYS = (
+    "facility_id", "period_grain", "period_start", "period_end",
+    "visit_count", "unique_patient_count", "new_patient_count",
+    "returning_patient_count", "repeat_visit_ratio", "pct_tha", "pct_dtd",
+    "pct_comorbid", "bp_control_rate", "bp_stage_normal_count",
+    "bp_stage_elevated_count", "bp_stage_1_count", "bp_stage_2_count",
+    "bp_stage_severe_count", "glycemic_control_rate", "avg_glucose",
+    "median_glucose", "avg_hba1c", "median_hba1c", "computed_at",
+)
+_COMORBIDITY_ROW_KEYS = (
+    "facility_id", "period_grain", "period_start", "diagnosis_label",
+    "patient_count", "computed_at",
+)
+_PATIENT_STATE_ROW_KEYS = (
+    "patient_key", "facility_id", "ho_ten", "sdt", "dia_chi",
+    "last_visit_date", "last_systolic", "last_diastolic", "last_glucose",
+    "last_hba1c", "is_bp_controlled", "is_bp_severe", "is_hba1c_controlled",
+    "is_out_of_control", "has_contact", "first_visit_date", "visit_count",
+    "computed_at",
+)
+_DATA_QUALITY_ROW_KEYS = (
+    "facility_id", "period_grain", "period_start", "period_end",
+    "files_processed", "avg_mapping_coverage_ratio", "total_rows_seen",
+    "accepted_clean_rows", "accepted_with_flags_rows", "rejected_rows",
+    "top_issue_codes", "computed_at",
+)
 _REPORT_COLUMNS = tuple(SystemReport.__table__.columns)
 
 
@@ -72,6 +99,7 @@ def compute_fingerprint(
     report_stats: Any,
     file_stats: Any,
     version: str,
+    cutoff: date,
 ) -> str:
     """Return a stable digest for the inputs and the deployed pipeline version."""
 
@@ -79,6 +107,7 @@ def compute_fingerprint(
         "file_stats": file_stats,
         "pipeline_version": version,
         "report_stats": report_stats,
+        "cutoff": cutoff,
     }
     canonical = json.dumps(
         payload,
@@ -151,93 +180,140 @@ async def _fetch_files_df(session: AsyncSession) -> pd.DataFrame:
     return pd.DataFrame(result.mappings().all())
 
 
+def _canonical_row(row: dict, family: str, computed_at: datetime) -> dict:
+    """Adapt legacy pipeline names to the final persistence/cache contract."""
+
+    value = dict(row)
+    aliases = {
+        "uploaded_date": "computed_at",
+        "is_bp_crisis": "is_bp_severe",
+        "bp_stage_crisis_count": "bp_stage_severe_count",
+        "avg_coverage_ratio": "avg_mapping_coverage_ratio",
+        "accepted_rows": "accepted_clean_rows",
+        "flagged_rows": "accepted_with_flags_rows",
+    }
+    for old, new in aliases.items():
+        if old in value and new not in value:
+            value[new] = value[old]
+        value.pop(old, None)
+    if family == "period":
+        value.setdefault("bp_stage_elevated_count", 0)
+    value["computed_at"] = computed_at
+    return value
+
+
+def _canonical_result(result: ComputationResult, computed_at: datetime) -> ComputationResult:
+    return ComputationResult(
+        period_summary_rows=[
+            {key: _canonical_row(row, "period", computed_at).get(key)
+             for key in _PERIOD_ROW_KEYS}
+            for row in result.period_summary_rows
+        ],
+        comorbidity_rows=[
+            {key: _canonical_row(row, "comorbidity", computed_at).get(key)
+             for key in _COMORBIDITY_ROW_KEYS}
+            for row in result.comorbidity_rows
+        ],
+        patient_state_rows=[
+            {key: _canonical_row(row, "patient", computed_at).get(key)
+             for key in _PATIENT_STATE_ROW_KEYS}
+            for row in result.patient_state_rows
+        ],
+        data_quality_rows=[
+            {key: _canonical_row(row, "quality", computed_at).get(key)
+             for key in _DATA_QUALITY_ROW_KEYS}
+            for row in result.data_quality_rows
+        ],
+        rows_processed=result.rows_processed,
+    )
+
+
+def _write_cache_value(cache: MetricsCache, key: str, value: object) -> None:
+    try:
+        cache.set(key, value, ttl_seconds=METRICS_CACHE_TTL_SECONDS)
+    except Exception as exc:
+        logger.warning(
+            "metrics cache write failed key=%s error=%s",
+            key,
+            type(exc).__name__,
+        )
+
+
 def _write_metrics_cache(
     cache: MetricsCache,
     result: ComputationResult,
     computed_at: datetime,
 ) -> None:
-    """Write sorted, non-empty cache entries for every result scope."""
+    """Write the complete cache snapshot and best-effort prune stale keys."""
 
-    period_summary: defaultdict[tuple[Any, str], list[dict]] = defaultdict(list)
-    period_summary_all: defaultdict[str, list[dict]] = defaultdict(list)
-    for row in result.period_summary_rows:
-        period_summary[(row["facility_id"], str(row["period_grain"]))].append(row)
-        period_summary_all[str(row["period_grain"])].append(row)
-    for grain, rows in period_summary_all.items():
-        if rows:
-            cache.set(
-                period_summary_key(None, grain),
-                sort_period_summary(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
-    for (facility_id, grain), rows in period_summary.items():
-        if facility_id is not None and rows:
-            cache.set(
-                period_summary_key(facility_id, grain),
-                sort_period_summary(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
+    canonical = _canonical_result(result, computed_at)
+    families = {
+        "period": canonical.period_summary_rows,
+        "comorbidity": canonical.comorbidity_rows,
+        "patient": canonical.patient_state_rows,
+        "quality": canonical.data_quality_rows,
+    }
+    facility_tokens = sorted({
+        str(row["facility_id"])
+        for rows in families.values()
+        for row in rows
+        if row.get("facility_id") is not None
+    })
+    scope_tokens = ("all", "rollup", *facility_tokens)
+    expected: dict[str, list[dict]] = {}
 
-    comorbidity: defaultdict[tuple[Any, str], list[dict]] = defaultdict(list)
-    comorbidity_all: defaultdict[str, list[dict]] = defaultdict(list)
-    for row in result.comorbidity_rows:
-        comorbidity[(row["facility_id"], str(row["period_grain"]))].append(row)
-        comorbidity_all[str(row["period_grain"])].append(row)
-    for grain, rows in comorbidity_all.items():
-        if rows:
-            cache.set(
-                comorbidity_key(None, grain),
-                sort_comorbidity(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
-    for (facility_id, grain), rows in comorbidity.items():
-        if facility_id is not None and rows:
-            cache.set(
-                comorbidity_key(facility_id, grain),
-                sort_comorbidity(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
+    def scoped(rows: list[dict], scope: str) -> list[dict]:
+        if scope == "all":
+            return [row for row in rows if row.get("facility_id") is not None]
+        if scope == "rollup":
+            return [row for row in rows if row.get("facility_id") is None]
+        return [row for row in rows if str(row.get("facility_id")) == scope]
 
-    out_of_control: defaultdict[Any, list[dict]] = defaultdict(list)
-    for row in result.patient_state_rows:
-        if row.get("is_out_of_control") is not True:
-            continue
-        out_of_control[None].append(row)
-        if row.get("facility_id") is not None:
-            out_of_control[row["facility_id"]].append(row)
-    for facility_id, rows in out_of_control.items():
-        if rows:
-            cache.set(
-                out_of_control_key(facility_id),
-                sort_out_of_control(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
+    for scope in scope_tokens:
+        for grain in _METRIC_GRAINS:
+            rows = scoped(families["period"], scope)
+            rows = [row for row in rows if str(row.get("period_grain")) == grain]
+            expected[period_summary_key(scope, grain)] = sort_period_summary(rows)
 
-    data_quality: defaultdict[tuple[Any, str], list[dict]] = defaultdict(list)
-    data_quality_all: defaultdict[str, list[dict]] = defaultdict(list)
-    for row in result.data_quality_rows:
-        data_quality[(row["facility_id"], str(row["period_grain"]))].append(row)
-        data_quality_all[str(row["period_grain"])].append(row)
-    for grain, rows in data_quality_all.items():
-        if rows:
-            cache.set(
-                data_quality_key(None, grain),
-                sort_data_quality(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
-    for (facility_id, grain), rows in data_quality.items():
-        if facility_id is not None and rows:
-            cache.set(
-                data_quality_key(facility_id, grain),
-                sort_data_quality(rows),
-                ttl_seconds=METRICS_CACHE_TTL_SECONDS,
-            )
+            rows = scoped(families["comorbidity"], scope)
+            rows = [row for row in rows if str(row.get("period_grain")) == grain]
+            expected[comorbidity_key(scope, grain)] = sort_comorbidity(rows)
 
-    cache.set(
+            rows = scoped(families["quality"], scope)
+            rows = [row for row in rows if str(row.get("period_grain")) == grain]
+            expected[data_quality_key(scope, grain)] = sort_data_quality(rows)
+
+        if scope != "rollup":
+            rows = [
+                row for row in scoped(families["patient"], scope)
+                if row.get("is_out_of_control") is True
+            ]
+            expected[out_of_control_key(scope)] = sort_out_of_control(rows)
+
+    for key, value in expected.items():
+        _write_cache_value(cache, key, value)
+    _write_cache_value(
+        cache,
         LAST_COMPUTED_AT_KEY,
         computed_at.isoformat(),
-        ttl_seconds=METRICS_CACHE_TTL_SECONDS,
     )
+
+    scan_keys = getattr(cache, "scan_keys", None)
+    delete_many = getattr(cache, "delete_many", None)
+    if not callable(scan_keys) or not callable(delete_many):
+        return
+    written = set(expected)
+    for prefix in METRICS_CACHE_PREFIXES:
+        try:
+            stale = [key for key in scan_keys(prefix) if key not in written]
+            if stale:
+                delete_many(stale)
+        except Exception as exc:
+            logger.warning(
+                "metrics cache prune failed prefix=%s error=%s",
+                prefix,
+                type(exc).__name__,
+            )
 
 
 class ComputeProcessor:
@@ -261,12 +337,16 @@ class ComputeProcessor:
     async def run(self, *, force: bool = False) -> ComputeOutcome:
         """Compute and atomically publish one append-only metrics run."""
 
+        run_at = now_utc()
+        cutoff = start_of_day_vietnam(run_at).date()
         started = time.monotonic()
         await self._repository.reap_stale_runs()
         report_stats, file_stats = await _fetch_input_stats(
             self._production, self._staging
         )
-        fingerprint = compute_fingerprint(report_stats, file_stats, PIPELINE_VERSION)
+        fingerprint = compute_fingerprint(
+            report_stats, file_stats, PIPELINE_VERSION, cutoff
+        )
         if (
             not force
             and fingerprint == await self._repository.last_succeeded_fingerprint()
@@ -288,8 +368,9 @@ class ComputeProcessor:
             async with self._staging.async_session_local() as session:
                 files_df = await _fetch_files_df(session)
 
-            run_at = now_utc()
-            result = self._pipeline.compute(report_df, files_df, run_at)
+            result = _canonical_result(
+                self._pipeline.compute(report_df, files_df, run_at), run_at
+            )
             _ensure_finite_metrics(
                 (
                     result.period_summary_rows,

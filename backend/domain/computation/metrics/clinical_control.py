@@ -1,4 +1,4 @@
-"""Clinical control aggregates with the canonical measurement parsers."""
+"""Patient-level clinical aggregates using the canonical parsers."""
 
 from __future__ import annotations
 
@@ -27,81 +27,159 @@ def _glucose(value: Any) -> float | None:
 
 
 def coerce_glucose_mmol(series: pd.Series) -> pd.Series:
-    """Convert a raw glucose series to mmol/L using the shared parser."""
-
-    return series.map(_glucose, na_action=None)
+    return series.map(_glucose, na_action=None).astype("float64")
 
 
 def coerce_bp_or_hba1c(series: pd.Series) -> pd.Series:
-    """Parse a raw BP/HbA1c series without silently dropping unit suffixes."""
-
-    return series.map(_measurement, na_action=None)
+    return series.map(_measurement, na_action=None).astype("float64")
 
 
-def _values(frame: pd.DataFrame, field: str, *, glucose: bool = False) -> pd.Series:
-    if field not in frame:
-        return pd.Series(dtype="float64")
-    converted = (
-        coerce_glucose_mmol(frame[field])
-        if glucose
-        else coerce_bp_or_hba1c(frame[field])
+def parse_measurements(frame: pd.DataFrame) -> pd.DataFrame:
+    """Parse all four clinical measurements once and retain them as columns."""
+
+    result = frame.copy()
+    result["_systolic"] = (
+        coerce_bp_or_hba1c(result["huyet_ap_tam_thu"])
+        if "huyet_ap_tam_thu" in result
+        else pd.Series(float("nan"), index=result.index)
     )
-    return converted.dropna().astype(float)
+    result["_diastolic"] = (
+        coerce_bp_or_hba1c(result["huyet_ap_tam_truong"])
+        if "huyet_ap_tam_truong" in result
+        else pd.Series(float("nan"), index=result.index)
+    )
+    result["_hba1c"] = (
+        coerce_bp_or_hba1c(result["chi_so_hba1c"])
+        if "chi_so_hba1c" in result
+        else pd.Series(float("nan"), index=result.index)
+    )
+    result["_glucose"] = (
+        coerce_glucose_mmol(result["chi_so_duong_huyet"])
+        if "chi_so_duong_huyet" in result
+        else pd.Series(float("nan"), index=result.index)
+    )
+    return result
 
 
-def _ratio(numerator: int, denominator: int) -> float | None:
-    return numerator / denominator if denominator else None
+def classify_bp(systolic: float, diastolic: float) -> str:
+    """Classify one valid BP pair using the five cut-point stages."""
 
-
-def _bp_stage(systolic: float, diastolic: float) -> str:
+    systolic = float(systolic)
+    diastolic = float(diastolic)
     # starting values - a clinician must sign off
     if systolic > 180 or diastolic > 120:
-        return "crisis"
+        return "severe"
     if systolic >= 140 or diastolic >= 90:
         return "stage_2"
-    if systolic >= 120 or diastolic >= 80:
+    if systolic >= 130 or diastolic >= 80:
         return "stage_1"
+    if systolic >= 120:
+        return "elevated"
     return "normal"
 
 
-def compute_clinical_control(frame: pd.DataFrame) -> dict[str, float | int | None]:
-    """Return BP staging/control and glycemic statistics for one slice."""
+def bp_is_controlled(systolic: float, diastolic: float) -> bool:
+    return float(systolic) < 140 and float(diastolic) < 90
 
-    systolic = (
-        coerce_bp_or_hba1c(frame["huyet_ap_tam_thu"])
-        if "huyet_ap_tam_thu" in frame
-        else pd.Series(index=frame.index, dtype="float64")
-    )
-    diastolic = (
-        coerce_bp_or_hba1c(frame["huyet_ap_tam_truong"])
-        if "huyet_ap_tam_truong" in frame
-        else pd.Series(index=frame.index, dtype="float64")
-    )
-    bp = pd.DataFrame({"systolic": systolic, "diastolic": diastolic}).dropna()
-    controlled = (bp["systolic"] < 140) & (bp["diastolic"] < 90)
-    stages = [
-        _bp_stage(float(row.systolic), float(row.diastolic))
-        for row in bp.itertuples(index=False)
-    ]
 
-    glucose = _values(frame, "chi_so_duong_huyet", glucose=True)
-    hba1c = _values(frame, "chi_so_hba1c")
+def _keys(frame: pd.DataFrame) -> pd.Series:
+    if "patient_key" in frame:
+        values = frame["patient_key"].astype("string")
+        return values.where(values.notna() & values.ne("nan"), frame.index.astype(str))
+    return pd.Series(frame.index.astype(str), index=frame.index, dtype="string")
+
+
+def _ordered(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    result["_patient_key"] = _keys(result).to_numpy()
+    result["_row_order"] = range(len(result))
+    date_key = "ngay_kham" if "ngay_kham" in result else "_row_order"
+    id_key = "id" if "id" in result else "_row_order"
+    return result.sort_values([date_key, id_key, "_row_order"], kind="stable", na_position="first")
+
+
+def _latest_valid_pair(frame: pd.DataFrame) -> pd.DataFrame:
+    valid = frame.dropna(subset=["_systolic", "_diastolic"])
+    if valid.empty:
+        return valid
+    return _ordered(valid).drop_duplicates("_patient_key", keep="last")
+
+
+def compute_bp_metrics(frame: pd.DataFrame) -> dict[str, float | int | None]:
+    if not {"_systolic", "_diastolic"}.issubset(frame):
+        frame = parse_measurements(frame)
+    reps = _latest_valid_pair(frame)
+    if reps.empty:
+        return {
+            "bp_control_rate": None,
+            "bp_stage_normal_count": 0,
+            "bp_stage_elevated_count": 0,
+            "bp_stage_1_count": 0,
+            "bp_stage_2_count": 0,
+            "bp_stage_severe_count": 0,
+        }
+    controlled = reps.apply(
+        lambda row: bp_is_controlled(row["_systolic"], row["_diastolic"]), axis=1
+    )
+    stages = reps.apply(
+        lambda row: classify_bp(row["_systolic"], row["_diastolic"]), axis=1
+    )
     return {
-        "bp_control_rate": _ratio(int(controlled.sum()), len(bp)),
-        "bp_stage_normal_count": stages.count("normal"),
-        "bp_stage_1_count": stages.count("stage_1"),
-        "bp_stage_2_count": stages.count("stage_2"),
-        "bp_stage_crisis_count": stages.count("crisis"),
-        "glycemic_control_rate": _ratio(int((hba1c < 7).sum()), len(hba1c)),
-        "avg_glucose": float(glucose.mean()) if len(glucose) else None,
-        "median_glucose": float(glucose.median()) if len(glucose) else None,
-        "avg_hba1c": float(hba1c.mean()) if len(hba1c) else None,
-        "median_hba1c": float(hba1c.median()) if len(hba1c) else None,
+        "bp_control_rate": float(controlled.mean()),
+        "bp_stage_normal_count": int(stages.eq("normal").sum()),
+        "bp_stage_elevated_count": int(stages.eq("elevated").sum()),
+        "bp_stage_1_count": int(stages.eq("stage_1").sum()),
+        "bp_stage_2_count": int(stages.eq("stage_2").sum()),
+        "bp_stage_severe_count": int(stages.eq("severe").sum()),
     }
 
 
+def _present(frame: pd.DataFrame, field: str) -> pd.Series:
+    if field not in frame:
+        return pd.Series(False, index=frame.index, dtype=bool)
+    values = frame[field]
+    return values.notna() & values.astype(str).str.strip().ne("") & values.astype(str).ne("nan")
+
+
+def compute_glycemic_metrics(frame: pd.DataFrame) -> dict[str, float | None]:
+    if not {"_hba1c", "_glucose"}.issubset(frame):
+        frame = parse_measurements(frame)
+    cohort_keys = set(_keys(frame.loc[_present(frame, "icd_dtd")]).tolist())
+    cohort = frame.copy()
+    cohort["_patient_key"] = _keys(cohort).to_numpy()
+    cohort = cohort.loc[cohort["_patient_key"].isin(cohort_keys)]
+    valid_hba1c = cohort.dropna(subset=["_hba1c"])
+    hba1c_reps = (
+        _ordered(valid_hba1c).drop_duplicates("_patient_key", keep="last")
+        if not valid_hba1c.empty
+        else valid_hba1c
+    )
+    glucose = frame["_glucose"].dropna() if "_glucose" in frame else pd.Series(dtype=float)
+    return {
+        "glycemic_control_rate": (
+            float((hba1c_reps["_hba1c"] < 7).mean())
+            if not hba1c_reps.empty
+            else None
+        ),
+        "avg_glucose": float(glucose.mean()) if not glucose.empty else None,
+        "median_glucose": float(glucose.median()) if not glucose.empty else None,
+        "avg_hba1c": float(hba1c_reps["_hba1c"].mean()) if not hba1c_reps.empty else None,
+        "median_hba1c": float(hba1c_reps["_hba1c"].median()) if not hba1c_reps.empty else None,
+    }
+
+
+def compute_clinical_control(frame: pd.DataFrame) -> dict[str, float | int | None]:
+    work = frame if {"_systolic", "_diastolic", "_hba1c", "_glucose"}.issubset(frame) else parse_measurements(frame)
+    return {**compute_bp_metrics(work), **compute_glycemic_metrics(work)}
+
+
 __all__ = [
+    "bp_is_controlled",
+    "classify_bp",
     "coerce_bp_or_hba1c",
     "coerce_glucose_mmol",
+    "compute_bp_metrics",
     "compute_clinical_control",
+    "compute_glycemic_metrics",
+    "parse_measurements",
 ]
