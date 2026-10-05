@@ -17,6 +17,7 @@ from backend.api.dto import (
     PatientStateMetric,
     PeriodSummaryMetric,
 )
+from backend.database.service.metrics.scope import MetricsScope
 from backend.redis_cache.cache import MetricsCache
 from backend.redis_cache.keys import (
     LAST_COMPUTED_AT_KEY,
@@ -43,19 +44,19 @@ class MetricsCacheProtocol(Protocol):
 
 class MetricsReadRepositoryProtocol(Protocol):
     async def period_summary(
-        self, facility_id: UUID | None, grain: str, *, run_id: UUID | None = None
+        self, scope: MetricsScope, grain: str, *, run_id: UUID | None = None
     ) -> list[dict]: ...
 
     async def comorbidity(
-        self, facility_id: UUID | None, grain: str, *, run_id: UUID | None = None
+        self, scope: MetricsScope, grain: str, *, run_id: UUID | None = None
     ) -> list[dict]: ...
 
     async def out_of_control(
-        self, facility_id: UUID | None, *, run_id: UUID | None = None
+        self, scope: MetricsScope, *, run_id: UUID | None = None
     ) -> list[dict]: ...
 
     async def data_quality(
-        self, facility_id: UUID | None, grain: str, *, run_id: UUID | None = None
+        self, scope: MetricsScope, grain: str, *, run_id: UUID | None = None
     ) -> list[dict]: ...
 
     async def last_computed_at(self, *, run_id: UUID | None = None) -> datetime | None: ...
@@ -133,39 +134,39 @@ class MetricsService:
         return models
 
     async def period_summary(
-        self, facility_id: UUID | None, grain: str
+        self, scope: MetricsScope, grain: str
     ) -> list[PeriodSummaryMetric]:
         return await self._get_rows(
-            period_summary_key(facility_id, grain),
+            period_summary_key(scope.token, grain),
             TypeAdapter(list[PeriodSummaryMetric]),
-            lambda: self._repository.period_summary(facility_id, grain),
+            lambda: self._repository.period_summary(scope, grain),
         )
 
     async def comorbidity(
-        self, facility_id: UUID | None, grain: str
+        self, scope: MetricsScope, grain: str
     ) -> list[ComorbidityMetric]:
         return await self._get_rows(
-            comorbidity_key(facility_id, grain),
+            comorbidity_key(scope.token, grain),
             TypeAdapter(list[ComorbidityMetric]),
-            lambda: self._repository.comorbidity(facility_id, grain),
+            lambda: self._repository.comorbidity(scope, grain),
         )
 
     async def out_of_control(
-        self, facility_id: UUID | None
+        self, scope: MetricsScope
     ) -> list[PatientStateMetric]:
         return await self._get_rows(
-            out_of_control_key(facility_id),
+            out_of_control_key(scope.token),
             TypeAdapter(list[PatientStateMetric]),
-            lambda: self._repository.out_of_control(facility_id),
+            lambda: self._repository.out_of_control(scope),
         )
 
     async def data_quality(
-        self, facility_id: UUID | None, grain: str
+        self, scope: MetricsScope, grain: str
     ) -> list[DataQualityMetric]:
         return await self._get_rows(
-            data_quality_key(facility_id, grain),
+            data_quality_key(scope.token, grain),
             TypeAdapter(list[DataQualityMetric]),
-            lambda: self._repository.data_quality(facility_id, grain),
+            lambda: self._repository.data_quality(scope, grain),
         )
 
     async def status(self) -> MetricsStatus:

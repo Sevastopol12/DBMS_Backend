@@ -1,8 +1,13 @@
 from .cache import MetricsCache
 from .connection import close_redis, create_redis_client, create_redis_pool
 from .keys import (
+    COMORBIDITY_PREFIX,
+    DATA_QUALITY_PREFIX,
     LAST_COMPUTED_AT_KEY,
+    METRICS_CACHE_PREFIXES,
     METRICS_CACHE_TTL_SECONDS,
+    OUT_OF_CONTROL_PREFIX,
+    PERIOD_SUMMARY_PREFIX,
     comorbidity_key,
     data_quality_key,
     facility_scope,
@@ -15,8 +20,13 @@ from .keys import (
 )
 
 __all__ = [
+    "COMORBIDITY_PREFIX",
+    "DATA_QUALITY_PREFIX",
     "LAST_COMPUTED_AT_KEY",
+    "METRICS_CACHE_PREFIXES",
     "METRICS_CACHE_TTL_SECONDS",
+    "OUT_OF_CONTROL_PREFIX",
+    "PERIOD_SUMMARY_PREFIX",
     "MetricsCache",
     "close_redis",
     "comorbidity_key",

@@ -2,32 +2,43 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
-from uuid import UUID
 
 METRICS_CACHE_TTL_SECONDS = 3000
 LAST_COMPUTED_AT_KEY = "metrics:last_computed_at"
+PERIOD_SUMMARY_PREFIX = "metrics:period_summary:"
+COMORBIDITY_PREFIX = "metrics:comorbidity:"
+OUT_OF_CONTROL_PREFIX = "metrics:patient_state:out_of_control:"
+DATA_QUALITY_PREFIX = "metrics:data_quality:"
+METRICS_CACHE_PREFIXES = (
+    PERIOD_SUMMARY_PREFIX,
+    COMORBIDITY_PREFIX,
+    OUT_OF_CONTROL_PREFIX,
+    DATA_QUALITY_PREFIX,
+)
 
 
-def facility_scope(facility_id: UUID | str | None) -> str:
-    """Return the cache scope token for a facility or the all-facilities rollup."""
+def facility_scope(scope: str) -> str:
+    """Return an already-normalized scope token unchanged."""
 
-    return "all" if facility_id is None else str(facility_id)
-
-
-def period_summary_key(facility_id: UUID | str | None, grain: str) -> str:
-    return f"metrics:period_summary:{facility_scope(facility_id)}:{grain}"
+    return scope
 
 
-def comorbidity_key(facility_id: UUID | str | None, grain: str) -> str:
-    return f"metrics:comorbidity:{facility_scope(facility_id)}:{grain}"
+def period_summary_key(scope: str, grain: str) -> str:
+    return f"{PERIOD_SUMMARY_PREFIX}{scope}:{grain}"
 
 
-def out_of_control_key(facility_id: UUID | str | None) -> str:
-    return f"metrics:patient_state:out_of_control:{facility_scope(facility_id)}"
+def comorbidity_key(scope: str, grain: str) -> str:
+    return f"{COMORBIDITY_PREFIX}{scope}:{grain}"
 
 
-def data_quality_key(facility_id: UUID | str | None, grain: str) -> str:
-    return f"metrics:data_quality:{facility_scope(facility_id)}:{grain}"
+def out_of_control_key(scope: str) -> str:
+    if scope == "rollup":
+        raise ValueError("rollup scope is invalid for patient state")
+    return f"{OUT_OF_CONTROL_PREFIX}{scope}"
+
+
+def data_quality_key(scope: str, grain: str) -> str:
+    return f"{DATA_QUALITY_PREFIX}{scope}:{grain}"
 
 
 def _sorted_rows(
@@ -69,7 +80,7 @@ def sort_out_of_control(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any
     return _sorted_rows(
         rows,
         (
-            ("is_bp_crisis", True),
+            ("is_bp_severe", True),
             ("last_visit_date", True),
             ("patient_key", False),
         ),
@@ -81,8 +92,13 @@ def sort_data_quality(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
 
 
 __all__ = [
+    "COMORBIDITY_PREFIX",
+    "DATA_QUALITY_PREFIX",
     "LAST_COMPUTED_AT_KEY",
+    "METRICS_CACHE_PREFIXES",
     "METRICS_CACHE_TTL_SECONDS",
+    "OUT_OF_CONTROL_PREFIX",
+    "PERIOD_SUMMARY_PREFIX",
     "comorbidity_key",
     "data_quality_key",
     "facility_scope",
