@@ -190,10 +190,6 @@ class MappingPlan(BaseModel):
         )
         return self
 
-    @property
-    def target_fields(self) -> list[str]:
-        return list(self.field_plans)
-
     @classmethod
     def from_field_plans(
         cls,
