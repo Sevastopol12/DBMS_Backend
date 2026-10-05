@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import threading
@@ -12,6 +13,7 @@ from typing import Any
 import redis
 from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 from .snapshot import (
     MappingSnapshot,
@@ -149,7 +151,7 @@ class MappingLookupGateway:
         except asyncio.CancelledError:
             self._fail_db_load(future, asyncio.CancelledError())
             raise
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - concurrency boundary failure isolation
             self._fail_db_load(future, exc)
             return self._publish_source(UnavailableMappingSource())
         finally:
@@ -244,10 +246,8 @@ class MappingLookupGateway:
             self.db_retry_at = self._clock() + self._cooldown_seconds
             if not future.done():
                 future.set_exception(unavailable)
-            try:
+            with contextlib.suppress(BaseException):
                 future.exception()
-            except BaseException:
-                pass
         logger.warning(
             "mapping DB snapshot load failed: %s (target: %s)",
             type(exc).__name__,
@@ -333,7 +333,7 @@ def _default_db_target() -> str:
         return "MAPPING_RDB_URL (unset)"
     try:
         url = make_url(raw_url)
-    except Exception:
+    except (ArgumentError, ValueError):
         return "MAPPING_RDB_URL (unset)"
     host = url.host or ""
     port = f":{url.port}" if url.port is not None else ""

@@ -69,10 +69,14 @@ class OpsService:
             for index in range(0, len(selected_ids), 500):
                 for file_id in selected_ids[index : index + 500]:
                     try:
-                        await run_in_threadpool(transform.apply_async, args=[str(file_id)])
-                    except Exception as exc:
+                        await run_in_threadpool(
+                            transform.apply_async, args=[str(file_id)]
+                        )
+                    except Exception as exc:  # noqa: BLE001 - resilience boundary: dispatch loop fails open
                         dispatch_failed += 1
-                        logger.warning("transform dispatch failed error=%s", type(exc).__name__)
+                        logger.warning(
+                            "transform dispatch failed error=%s", type(exc).__name__
+                        )
                     else:
                         dispatched += 1
 
@@ -83,7 +87,11 @@ class OpsService:
                 if len(skipped) < 100:
                     skipped.append({"file_id": str(file_id), "reason": reason})
             skipped_total = len(result.skipped)
-            status = WorkflowStatus.PARTIAL.value if dispatch_failed else WorkflowStatus.SUCCEEDED.value
+            status = (
+                WorkflowStatus.PARTIAL.value
+                if dispatch_failed
+                else WorkflowStatus.SUCCEEDED.value
+            )
             await self.workflow.finish(
                 run_id,
                 status,
@@ -107,11 +115,16 @@ class OpsService:
         except Exception as exc:
             try:
                 await self.workflow.finish(
-                    run_id, WorkflowStatus.FAILED.value,
-                    error_code="DISPATCH_FAILED", error_message=type(exc).__name__,
+                    run_id,
+                    WorkflowStatus.FAILED.value,
+                    error_code="DISPATCH_FAILED",
+                    error_message=type(exc).__name__,
                 )
-            except Exception as finish_error:
-                logger.warning("ops transform run finish failed error=%s", type(finish_error).__name__)
+            except Exception as finish_error:  # noqa: BLE001 - resilience boundary: run-log update best effort
+                logger.warning(
+                    "ops transform run finish failed error=%s",
+                    type(finish_error).__name__,
+                )
             raise
 
     async def dispatch_compute(self, force: bool) -> str:
@@ -130,36 +143,56 @@ class OpsService:
         latest = await self.workflow.latest_by_type()
         workflows = {}
         for workflow_type, env_name, default in (
-            (WorkflowType.TRANSFORM_SWEEP.value, "TRANSFORM_SWEEP_INTERVAL_SECONDS", 28800),
+            (
+                WorkflowType.TRANSFORM_SWEEP.value,
+                "TRANSFORM_SWEEP_INTERVAL_SECONDS",
+                28800,
+            ),
             (WorkflowType.COMPUTATION.value, "COMPUTE_INTERVAL_SECONDS", 1800),
         ):
             interval = int(os.getenv(env_name, str(default)))
             last = latest.get(workflow_type)
-            overdue = None if last is None else self._overdue(last.get("started_at"), interval)
+            overdue = (
+                None
+                if last is None
+                else self._overdue(last.get("started_at"), interval)
+            )
             workflows[workflow_type] = {
                 "last_run": last,
                 "expected_interval_seconds": interval,
                 "overdue": overdue,
             }
-        degraded = not all(checks.values()) or any(v["overdue"] is True for v in workflows.values())
-        return {"status": "degraded" if degraded else "ok", "checks": checks, "workflows": workflows}
+        degraded = not all(checks.values()) or any(
+            v["overdue"] is True for v in workflows.values()
+        )
+        return {
+            "status": "degraded" if degraded else "ok",
+            "checks": checks,
+            "workflows": workflows,
+        }
 
     async def _probe_db(self, config) -> bool:
         async def probe():
             from sqlalchemy import text
+
             async with config.async_engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
+
         try:
             await asyncio.wait_for(probe(), timeout=2.0)
-        except Exception as exc:
-            logger.warning("ops database health check failed error=%s", type(exc).__name__)
+        except Exception as exc:  # noqa: BLE001 - resilience boundary: health probe fails open
+            logger.warning(
+                "ops database health check failed error=%s", type(exc).__name__
+            )
             return False
         return True
 
     async def _probe_redis(self) -> bool:
         try:
-            await asyncio.wait_for(asyncio.to_thread(self.resources.redis.ping), timeout=2.0)
-        except Exception as exc:
+            await asyncio.wait_for(
+                asyncio.to_thread(self.resources.redis.ping), timeout=2.0
+            )
+        except Exception as exc:  # noqa: BLE001 - resilience boundary: health probe fails open
             logger.warning("ops redis health check failed error=%s", type(exc).__name__)
             return False
         return True
@@ -170,23 +203,42 @@ class OpsService:
             return True
         if started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=VIETNAM_TZ)
-        return (now_vietnam() - started_at.astimezone(VIETNAM_TZ)).total_seconds() > 2 * interval
+        return (
+            now_vietnam() - started_at.astimezone(VIETNAM_TZ)
+        ).total_seconds() > 2 * interval
 
     async def file_summary(self, facility_id: UUID | None) -> dict:
         counts = await self.ingestion.status_counts(facility_id=facility_id)
         by_status = {status: counts.get(status, 0) for status in _STATUS_ORDER}
         oldest = await self.ingestion.oldest_queued_at()
         now = now_vietnam()
-        age = None if oldest is None else max(0.0, (now - oldest.astimezone(VIETNAM_TZ)).total_seconds())
+        age = (
+            None
+            if oldest is None
+            else max(0.0, (now - oldest.astimezone(VIETNAM_TZ)).total_seconds())
+        )
         return {
-            "total": sum(by_status.values()), "by_status": by_status,
+            "total": sum(by_status.values()),
+            "by_status": by_status,
             "errors": {
-                **(await self.ingestion.retry_buckets(max_attempts=int(os.getenv("TRANSFORM_MAX_ATTEMPTS", "3")), facility_id=facility_id)),
-                "by_code": await self.ingestion.error_code_counts(status="ERROR", facility_id=facility_id),
+                **(
+                    await self.ingestion.retry_buckets(
+                        max_attempts=int(os.getenv("TRANSFORM_MAX_ATTEMPTS", "3")),
+                        facility_id=facility_id,
+                    )
+                ),
+                "by_code": await self.ingestion.error_code_counts(
+                    status="ERROR", facility_id=facility_id
+                ),
             },
-            "rejected_by_code": await self.ingestion.error_code_counts(status="REJECTED", facility_id=facility_id),
-            "oldest_queued_at": oldest, "oldest_queued_age_seconds": age,
-            "last_completed_at": await self.ingestion.last_completed_at(facility_id=facility_id),
+            "rejected_by_code": await self.ingestion.error_code_counts(
+                status="REJECTED", facility_id=facility_id
+            ),
+            "oldest_queued_at": oldest,
+            "oldest_queued_age_seconds": age,
+            "last_completed_at": await self.ingestion.last_completed_at(
+                facility_id=facility_id
+            ),
         }
 
     async def schedule(self) -> dict:
@@ -194,21 +246,34 @@ class OpsService:
             prefix = os.getenv("REDBEAT_KEY_PREFIX", "redbeat:")
             entries = []
             for name in ("compute-metrics-every-30-min", "transform-sweep-every-8h"):
-                raw_definition = self.resources.redis.hget(f"{prefix}{name}", "definition")
+                raw_definition = self.resources.redis.hget(
+                    f"{prefix}{name}", "definition"
+                )
                 raw_meta = self.resources.redis.hget(f"{prefix}{name}", "meta")
                 if not raw_definition:
                     continue
-                definition = json.loads(_json_value(raw_definition), cls=RedBeatJSONDecoder)
-                meta = json.loads(_json_value(raw_meta), cls=RedBeatJSONDecoder) if raw_meta else {}
+                definition = json.loads(
+                    _json_value(raw_definition), cls=RedBeatJSONDecoder
+                )
+                meta = (
+                    json.loads(_json_value(raw_meta), cls=RedBeatJSONDecoder)
+                    if raw_meta
+                    else {}
+                )
                 last = meta.get("last_run_at")
-                entries.append({
-                    "name": name, "task": definition.get("task", ""),
-                    "interval_seconds": _interval_seconds(definition.get("schedule")),
-                    "last_run_at": last,
-                    "total_run_count": int(meta.get("total_run_count", 0)),
-                })
+                entries.append(
+                    {
+                        "name": name,
+                        "task": definition.get("task", ""),
+                        "interval_seconds": _interval_seconds(
+                            definition.get("schedule")
+                        ),
+                        "last_run_at": last,
+                        "total_run_count": int(meta.get("total_run_count", 0)),
+                    }
+                )
             return {"available": True, "entries": entries}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - resilience boundary: schedule read fails open
             logger.warning("ops schedule read failed error=%s", type(exc).__name__)
             return {"available": False, "entries": []}
 

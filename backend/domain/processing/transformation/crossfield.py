@@ -21,7 +21,7 @@ class CrossFieldIssue:
 def _value(values: Mapping[str, Any], field: str) -> Any:
     try:
         return values.get(field)
-    except Exception:
+    except (AttributeError, TypeError):
         return None
 
 
@@ -160,7 +160,7 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
                     )
                 )
         return issues
-    except Exception:
+    except Exception:  # noqa: BLE001 - diagnostics must never reject a row
         return []
 
 

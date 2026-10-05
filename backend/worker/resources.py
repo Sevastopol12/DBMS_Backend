@@ -71,7 +71,7 @@ def close_worker_storage() -> None:
         if config is not None:
             try:
                 close_storage(config)
-            except Exception as exc:  # pragma: no cover - defensive shutdown path
+            except Exception as exc:  # pragma: no cover - defensive shutdown path  # noqa: BLE001 - shutdown cleanup must not raise
                 logger.error("worker storage close failed: %s", type(exc).__name__)
 
 
@@ -101,7 +101,7 @@ def close_worker_redis() -> None:
         if client is not None:
             try:
                 close_redis(client)
-            except Exception as exc:  # pragma: no cover - defensive shutdown path
+            except Exception as exc:  # pragma: no cover - defensive shutdown path  # noqa: BLE001 - shutdown cleanup must not raise
                 logger.error("worker Redis close failed: %s", type(exc).__name__)
 
 
@@ -116,7 +116,7 @@ async def _dispose_safely(config: RDBAsyncConnectionConfig | None, label: str) -
         return
     try:
         await dispose_connection(config)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - shutdown cleanup must not raise
         logger.error("worker %s engine dispose failed: %s", label, type(exc).__name__)
 
 
@@ -125,7 +125,7 @@ def _close_storage_safely(config: StorageAsyncConnectionConfig | None) -> None:
         return
     try:
         close_storage(config)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - shutdown cleanup must not raise
         logger.error("worker probe storage close failed: %s", type(exc).__name__)
 
 

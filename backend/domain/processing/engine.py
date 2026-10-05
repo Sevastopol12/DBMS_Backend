@@ -200,8 +200,8 @@ class TransformPipeline:
             acc,
         )
 
-        for field in OPTIONAL_CLINICAL_FIELDS:
-            result = validation_results.get(field)
+        for field_name in OPTIONAL_CLINICAL_FIELDS:
+            result = validation_results.get(field_name)
             if (
                 result is not None
                 and result.state not in {
@@ -209,8 +209,8 @@ class TransformPipeline:
                     ValidationState.VALID,
                 }
             ):
-                values[field] = None
-                flag = f"FIELD_DROPPED:{field}"
+                values[field_name] = None
+                flag = f"FIELD_DROPPED:{field_name}"
                 acc.add_flag(flag)
                 self._add_issues(quality, [f"FLAG:{flag}"], index)
 
