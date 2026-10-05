@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Protocol, TypeVar
 from uuid import UUID
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from backend.api.dto import (
     ComorbidityMetric,
@@ -59,7 +59,9 @@ class MetricsReadRepositoryProtocol(Protocol):
         self, scope: MetricsScope, grain: str, *, run_id: UUID | None = None
     ) -> list[dict]: ...
 
-    async def last_computed_at(self, *, run_id: UUID | None = None) -> datetime | None: ...
+    async def last_computed_at(
+        self, *, run_id: UUID | None = None
+    ) -> datetime | None: ...
 
 
 MetricModel = TypeVar("MetricModel")
@@ -81,7 +83,7 @@ class MetricsService:
     ) -> list[MetricModel] | None:
         try:
             value = await asyncio.to_thread(self._cache.get, key)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "metrics cache read failed key=%s error=%s",
                 key,
@@ -92,7 +94,7 @@ class MetricsService:
             return None
         try:
             return adapter.validate_python(value)
-        except Exception as exc:
+        except ValidationError as exc:
             logger.warning(
                 "invalid metrics cache payload key=%s error=%s",
                 key,
@@ -113,7 +115,7 @@ class MetricsService:
                 payload,
                 ttl_seconds=METRICS_CACHE_TTL_SECONDS,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "metrics cache write failed key=%s error=%s",
                 key,
@@ -151,9 +153,7 @@ class MetricsService:
             lambda: self._repository.comorbidity(scope, grain),
         )
 
-    async def out_of_control(
-        self, scope: MetricsScope
-    ) -> list[PatientStateMetric]:
+    async def out_of_control(self, scope: MetricsScope) -> list[PatientStateMetric]:
         return await self._get_rows(
             out_of_control_key(scope.token),
             TypeAdapter(list[PatientStateMetric]),
@@ -172,7 +172,7 @@ class MetricsService:
     async def status(self) -> MetricsStatus:
         try:
             value = await asyncio.to_thread(self._cache.get, LAST_COMPUTED_AT_KEY)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(
                 "metrics cache read failed key=%s error=%s",
                 LAST_COMPUTED_AT_KEY,
@@ -182,7 +182,7 @@ class MetricsService:
         if value is not None:
             try:
                 timestamp = TypeAdapter(datetime).validate_python(value)
-            except Exception as exc:
+            except ValidationError as exc:
                 logger.warning(
                     "invalid metrics cache payload key=%s error=%s",
                     LAST_COMPUTED_AT_KEY,
@@ -191,9 +191,7 @@ class MetricsService:
             else:
                 return MetricsStatus(last_computed_at=timestamp)
 
-        return MetricsStatus(
-            last_computed_at=await self._repository.last_computed_at()
-        )
+        return MetricsStatus(last_computed_at=await self._repository.last_computed_at())
 
 
 __all__ = [

@@ -45,7 +45,7 @@ class SweepProcessor:
                 try:
                     self.dispatch(file_id)
                     dispatched += 1
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - one failure must not stop sweep
                     if len(dispatch_errors) < 5:
                         dispatch_errors.append(type(exc).__name__)
                     logger.warning("transform dispatch failed file_id=%s error=%s", file_id, type(exc).__name__)
@@ -75,13 +75,13 @@ class SweepProcessor:
                         run_id, WorkflowStatus.FAILED.value,
                         error_code=SWEEP_FAILED, error_message=type(exc).__name__,
                     )
-                except Exception as finish_exc:
+                except Exception as finish_exc:  # noqa: BLE001 - finish must not mask original
                     logger.warning("transform sweep finish failed error=%s", type(finish_exc).__name__)
             raise
         finally:
             try:
                 await self.workflow.prune(older_than=timedelta(days=self.settings.retention_days))
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - prune in finally is best-effort
                 logger.warning("transform sweep prune failed error=%s", type(exc).__name__)
 
 

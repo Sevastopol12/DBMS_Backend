@@ -6,11 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from backend.api.dependencies import (
-    get_ingestion_repository,
-    get_metrics_repository,
-    get_report_repository,
+    IngestionRepositoryDep,
+    MetricsRepositoryDep,
+    ReportRepositoryDep,
+    WorkflowRunRepositoryDep,
     get_resources,
-    get_workflow_repository,
 )
 from backend.api.ops_dto import (
     ComputeRequest,
@@ -32,10 +32,10 @@ router = APIRouter()
 
 def get_ops_service(
     request: Request,
-    ingestion=Depends(get_ingestion_repository),
-    workflow=Depends(get_workflow_repository),
-    reports=Depends(get_report_repository),
-    metrics=Depends(get_metrics_repository),
+    ingestion: IngestionRepositoryDep,
+    workflow: WorkflowRunRepositoryDep,
+    reports: ReportRepositoryDep,
+    metrics: MetricsRepositoryDep,
 ) -> OpsService:
     return OpsService(
         resources=get_resources(request),

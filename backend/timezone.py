@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 
 VIETNAM_TZ_NAME = "Asia/Ho_Chi_Minh"
 VIETNAM_TZ = ZoneInfo(VIETNAM_TZ_NAME)
-UTC = UTC
 
 
 def now_vietnam() -> datetime:
