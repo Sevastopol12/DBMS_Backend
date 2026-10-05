@@ -57,24 +57,4 @@ def resolve_patient_key(
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def add_patient_key(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy with one stable identity key per row.
-
-    Invalid non-empty CCCD values raise ``ValueError``.  The pipeline uses
-    the same resolver row-by-row so it can drop invalid rows and log a count.
-    """
-
-    result = frame.copy()
-    result["patient_key"] = [
-        resolve_patient_key(
-            row.get("cccd"),
-            row.get("ho_ten"),
-            row.get("nam_sinh"),
-            row.get("dia_chi"),
-        )
-        for _, row in result.iterrows()
-    ]
-    return result
-
-
-__all__ = ["add_patient_key", "resolve_patient_key"]
+__all__ = ["resolve_patient_key"]
