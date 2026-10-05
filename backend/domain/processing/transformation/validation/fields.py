@@ -293,11 +293,4 @@ def validate_field(
     return validator(field, value, policy)
 
 
-def validate_row(values: dict[str, Any]) -> dict[str, ValidationResult]:
-    return {
-        field: validate_field(field, values.get(field))
-        for field in sorted(CANONICAL_FIELD_SET)
-    }
-
-
-__all__ = ["validate_field", "validate_row"]
+__all__ = ["validate_field"]
