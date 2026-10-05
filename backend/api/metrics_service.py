@@ -31,17 +31,6 @@ from backend.redis_cache.keys import (
 logger = logging.getLogger(__name__)
 
 
-class MetricsCacheProtocol(Protocol):
-    def get(self, key: str) -> object | None: ...
-
-    def set(
-        self,
-        key: str,
-        value: object,
-        ttl_seconds: int | None = None,
-    ) -> None: ...
-
-
 class MetricsReadRepositoryProtocol(Protocol):
     async def period_summary(
         self, scope: MetricsScope, grain: str, *, run_id: UUID | None = None
@@ -195,7 +184,6 @@ class MetricsService:
 
 
 __all__ = [
-    "MetricsCacheProtocol",
     "MetricsReadRepositoryProtocol",
     "MetricsService",
 ]
