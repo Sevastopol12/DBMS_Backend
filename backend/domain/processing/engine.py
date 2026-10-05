@@ -10,6 +10,7 @@ from backend.database.canonical import (
     ACCEPTANCE_FIELDS,
     CANONICAL_FIELD_NAMES,
     CANONICAL_FIELD_SET,
+    OPTIONAL_CLINICAL_FIELDS,
 )
 from backend.timezone import today_vietnam
 
@@ -124,10 +125,15 @@ class TransformPipeline:
 
         mapping_reasons = self.policy.mapping_rejection_reasons(plan)
         if mapping_reasons:
+            quality.accepted_rows = 0
+            quality.accepted_clean_rows = 0
+            quality.accepted_with_flags_rows = 0
             quality.rejected_rows = len(dataset.rows)
             self._add_issues(quality, mapping_reasons)
             quality.decision = FileDecision.REJECTED
             quality.processing_stage = ProcessingStage.POLICY
+            if not quality.counts_balanced:
+                raise RuntimeError("Quality counters are not balanced")
             return TransformResult(
                 file_id=dataset.source_file_id,
                 rejected_row_count=len(dataset.rows),
@@ -157,9 +163,16 @@ class TransformPipeline:
             quality.processing_stage = ProcessingStage.POLICY
             accepted_rows = []
             accepted_numbers = []
+            quality.accepted_rows = 0
+            quality.accepted_clean_rows = 0
+            quality.accepted_with_flags_rows = 0
+            quality.rejected_rows = quality.total_rows
         else:
             quality.decision = FileDecision.ACCEPTED
             quality.processing_stage = ProcessingStage.COMPLETED
+
+        if not quality.counts_balanced:
+            raise RuntimeError("Quality counters are not balanced")
 
         return TransformResult(
             file_id=dataset.source_file_id,
@@ -186,6 +199,20 @@ class TransformPipeline:
             quality,
             acc,
         )
+
+        for field in OPTIONAL_CLINICAL_FIELDS:
+            result = validation_results.get(field)
+            if (
+                result is not None
+                and result.state not in {
+                    ValidationState.MISSING,
+                    ValidationState.VALID,
+                }
+            ):
+                values[field] = None
+                flag = f"FIELD_DROPPED:{field}"
+                acc.add_flag(flag)
+                self._add_issues(quality, [f"FLAG:{flag}"], index)
 
         crossfield_rejection_issues = self._apply_crossfield(
             values,
@@ -224,6 +251,10 @@ class TransformPipeline:
                 report_values["ngay_kham"] = None
             accepted_row = ReportRow(**report_values)
             quality.accepted_rows += 1
+            if acc.flags:
+                quality.accepted_with_flags_rows += 1
+            else:
+                quality.accepted_clean_rows += 1
             if acc.flags:
                 quality.flagged_rows += 1
                 review_record = RowIssueRecord(

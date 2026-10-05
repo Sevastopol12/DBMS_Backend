@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Iterator, Protocol
+from typing import Protocol
 
 from ...models import CacheSource, HeaderMapValue
 
@@ -61,7 +62,7 @@ class MappingSnapshot:
         cls,
         direct_raw: dict[bytes | str, bytes | str],
         dynamic_raw: dict[bytes | str, bytes | str],
-    ) -> "MappingSnapshot":
+    ) -> MappingSnapshot:
         return cls(
             direct=cls._decode_hash(direct_raw),
             dynamic=cls._decode_hash(dynamic_raw),
@@ -69,7 +70,7 @@ class MappingSnapshot:
         )
 
     @classmethod
-    def from_rows(cls, rows: Iterable[object]) -> "MappingSnapshot":
+    def from_rows(cls, rows: Iterable[object]) -> MappingSnapshot:
         values: dict[str, dict[str, set[str]]] = {
             CacheSource.DIRECT.value: {},
             CacheSource.DYNAMIC.value: {},
@@ -144,9 +145,9 @@ class UnavailableMappingSource:
 
 
 __all__ = [
+    "MappingSnapshot",
+    "MappingSource",
     "MappingSourceKind",
     "MappingSourceUnavailable",
-    "MappingSource",
-    "MappingSnapshot",
     "UnavailableMappingSource",
 ]

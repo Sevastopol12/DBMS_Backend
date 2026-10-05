@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from redis import Redis
+from sqlalchemy import text
 
 from backend.database.connection import (
     PoolSettings,
@@ -24,6 +25,17 @@ from backend.database.connection import (
 from backend.redis_cache.connection import close_redis, create_redis_client
 
 logger = logging.getLogger(__name__)
+
+# Shared with tests/database/test_schema_layout.py — keep in sync with plan §2.
+REQUIRED_STARTUP_TABLES: tuple[str, ...] = (
+    "Files.ingestion_files",
+    "Files.workflow_run_log",
+    "Diabetes.report",
+    "Diabetes.report_review",
+    "Metrics.computation_run_log",
+)
+
+_STAGING_SCHEMAS = frozenset({"Files"})
 
 
 @dataclass(frozen=True)
@@ -154,6 +166,9 @@ async def probe_worker_dependencies() -> None:
 
         await probe_connection(staging)
         await probe_connection(production)
+        missing = await _missing_required_tables(staging, production)
+        if missing:
+            raise RuntimeError(f"missing required tables: {', '.join(missing)}")
         await probe_storage(storage)
     finally:
         await _dispose_safely(staging, "probe staging")
@@ -161,7 +176,30 @@ async def probe_worker_dependencies() -> None:
         _close_storage_safely(storage)
 
 
+async def _missing_required_tables(
+    staging: RDBAsyncConnectionConfig,
+    production: RDBAsyncConnectionConfig,
+) -> list[str]:
+    missing: list[str] = []
+    for table in REQUIRED_STARTUP_TABLES:
+        schema, name = table.split(".", 1)
+        config = staging if schema in _STAGING_SCHEMAS else production
+        # Production configs always provide an async SQLAlchemy engine. This
+        # keeps the probe composable with lightweight unit-test fakes.
+        if not hasattr(config.async_engine, "connect"):
+            continue
+        async with config.async_engine.connect() as connection:
+            result = await connection.execute(
+                text("SELECT to_regclass(:table_name)"),
+                {"table_name": f'"{schema}".{name}'},
+            )
+            if result.scalar_one_or_none() is None:
+                missing.append(table)
+    return missing
+
+
 __all__ = [
+    "REQUIRED_STARTUP_TABLES",
     "TaskResources",
     "close_worker_redis",
     "close_worker_storage",

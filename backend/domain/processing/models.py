@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Iterable, TypeAlias
+from typing import Any
 from uuid import UUID
 
 from pydantic import (
@@ -22,8 +23,8 @@ from backend.database.canonical import (
 )
 from backend.timezone import VIETNAM_TZ, ensure_vietnam_aware
 
-SourceCellValue: TypeAlias = object | None
-SourceRow: TypeAlias = dict[str, SourceCellValue]
+type SourceCellValue = object | None
+type SourceRow = dict[str, SourceCellValue]
 
 
 class ReportRow(BaseModel):
@@ -174,7 +175,7 @@ class MappingPlan(BaseModel):
     coverage_ratio: float = 0.0
 
     @model_validator(mode="after")
-    def calculate_statistics(self) -> "MappingPlan":
+    def calculate_statistics(self) -> MappingPlan:
         invalid = set(self.field_plans) - CANONICAL_FIELD_SET
         if invalid:
             raise ValueError(f"Unknown mapping targets: {sorted(invalid)}")
@@ -200,7 +201,7 @@ class MappingPlan(BaseModel):
         *,
         unmapped_headers: Iterable[str] = (),
         ambiguous_headers: Iterable[str] = (),
-    ) -> "MappingPlan":
+    ) -> MappingPlan:
         plans = {plan.target_field: plan for plan in field_plans}
         return cls(
             field_plans=plans,
@@ -271,7 +272,11 @@ class FieldQuality(BaseModel):
 
 
 class QualityReport(BaseModel):
-    """Safe aggregate report; it intentionally contains no raw row values."""
+    """Safe aggregate report; it intentionally contains no raw row values.
+
+    ``flagged_rows`` overlaps the accepted-with-flags and rejected counters;
+    it is retained as a diagnostic legacy field and is not a balanced counter.
+    """
 
     file_id: UUID | None = None
     facility_id: UUID | None = None
@@ -283,6 +288,8 @@ class QualityReport(BaseModel):
     unmapped_headers: list[str] = Field(default_factory=list)
     ambiguous_headers: list[str] = Field(default_factory=list)
     total_rows: int = 0
+    accepted_clean_rows: int = 0
+    accepted_with_flags_rows: int = 0
     accepted_rows: int = 0
     flagged_rows: int = 0
     rejected_rows: int = 0
@@ -290,6 +297,22 @@ class QualityReport(BaseModel):
     issue_code_counts: dict[str, int] = Field(default_factory=dict)
     safe_error_samples: list[dict[str, str | int]] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def synchronize_accepted_rows(self) -> QualityReport:
+        self.accepted_rows = (
+            self.accepted_clean_rows + self.accepted_with_flags_rows
+        )
+        return self
+
+    @property
+    def counts_balanced(self) -> bool:
+        return (
+            self.accepted_clean_rows
+            + self.accepted_with_flags_rows
+            + self.rejected_rows
+            == self.total_rows
+        )
 
     @computed_field
     @property
@@ -366,7 +389,7 @@ class TransformResult(BaseModel):
     review_records: list[RowIssueRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def synchronize_counts(self) -> "TransformResult":
+    def synchronize_counts(self) -> TransformResult:
         supplied_count = "accepted_row_count" in self.model_fields_set
         if supplied_count and self.accepted_row_count != len(self.accepted_rows):
             raise ValueError("accepted_row_count must match accepted_rows")
@@ -409,25 +432,25 @@ def safe_issue_sample(row_number: int, issue_code: str) -> dict[str, str | int]:
 
 
 __all__ = [
-    "SourceRow",
-    "ReportRow",
-    "ColumnMap",
     "CacheSource",
-    "HeaderMapValue",
-    "SourceDataset",
-    "SourceCellValue",
-    "FileStatus",
+    "ColumnMap",
     "FieldPlan",
+    "FieldQuality",
     "FileAcceptancePolicy",
     "FileDecision",
-    "FieldQuality",
+    "FileStatus",
+    "HeaderMapValue",
     "MappingOperation",
     "MappingPlan",
     "ProcessingStage",
     "QualityReport",
+    "ReportRow",
     "RowDisposition",
     "RowIssueRecord",
     "RuleMode",
+    "SourceCellValue",
+    "SourceDataset",
+    "SourceRow",
     "TransformResult",
     "ValidationPolicy",
     "safe_issue_sample",

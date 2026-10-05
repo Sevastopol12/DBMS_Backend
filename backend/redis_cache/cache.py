@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Iterable
 
 from redis import Redis
 
@@ -46,6 +47,33 @@ class MetricsCache:
                 key,
                 type(exc).__name__,
             )
+
+    def delete_many(self, keys: Iterable[str]) -> None:
+        key_list = list(keys)
+        if not key_list:
+            return
+        try:
+            self.client.delete(*key_list)
+        except Exception as exc:
+            logger.warning(
+                "Redis metrics cache unavailable during delete keys=%s error=%s",
+                len(key_list),
+                type(exc).__name__,
+            )
+
+    def scan_keys(self, prefix: str) -> list[str]:
+        try:
+            return [
+                key.decode() if isinstance(key, bytes) else str(key)
+                for key in self.client.scan_iter(match=f"{prefix}*")
+            ]
+        except Exception as exc:
+            logger.warning(
+                "Redis metrics cache unavailable during scan prefix=%s error=%s",
+                prefix,
+                type(exc).__name__,
+            )
+            return []
 
 
 __all__ = ["MetricsCache"]

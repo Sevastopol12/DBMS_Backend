@@ -11,6 +11,7 @@ from backend.api.dto import (
     MetricsStatus,
     PatientStateMetric,
     PeriodSummaryMetric,
+    to_metrics_scope,
 )
 from backend.api.metrics_service import MetricsService
 from backend.database.errors import MetricsStoreUnavailable
@@ -30,7 +31,9 @@ async def get_period_summary(
     service: MetricsServiceDependency,
 ) -> list[PeriodSummaryMetric]:
     try:
-        return await service.period_summary(query.facility_id, query.grain)
+        return await service.period_summary(
+            to_metrics_scope(query.facility_id), query.grain
+        )
     except MetricsStoreUnavailable as exc:
         raise _unavailable() from exc
 
@@ -41,7 +44,9 @@ async def get_comorbidity(
     service: MetricsServiceDependency,
 ) -> list[ComorbidityMetric]:
     try:
-        return await service.comorbidity(query.facility_id, query.grain)
+        return await service.comorbidity(
+            to_metrics_scope(query.facility_id), query.grain
+        )
     except MetricsStoreUnavailable as exc:
         raise _unavailable() from exc
 
@@ -52,7 +57,9 @@ async def get_out_of_control(
     service: MetricsServiceDependency,
 ) -> list[PatientStateMetric]:
     try:
-        return await service.out_of_control(query.facility_id)
+        return await service.out_of_control(
+            to_metrics_scope(query.facility_id, allow_rollup=False)
+        )
     except MetricsStoreUnavailable as exc:
         raise _unavailable() from exc
 
@@ -63,7 +70,9 @@ async def get_data_quality(
     service: MetricsServiceDependency,
 ) -> list[DataQualityMetric]:
     try:
-        return await service.data_quality(query.facility_id, query.grain)
+        return await service.data_quality(
+            to_metrics_scope(query.facility_id), query.grain
+        )
     except MetricsStoreUnavailable as exc:
         raise _unavailable() from exc
 

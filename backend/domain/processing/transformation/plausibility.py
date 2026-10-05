@@ -8,10 +8,10 @@ from ..issues import Issue
 
 # starting values - a clinician must sign off
 BOUNDS = {
-    "huyet_ap_tam_thu": (Decimal("40"), Decimal("260")),
-    "huyet_ap_tam_truong": (Decimal("20"), Decimal("180")),
+    "huyet_ap_tam_thu": (Decimal(40), Decimal(260)),
+    "huyet_ap_tam_truong": (Decimal(20), Decimal(180)),
     "chi_so_duong_huyet": (Decimal("1.0"), Decimal("40.0")),
-    "chi_so_hba1c": (Decimal("3"), Decimal("20")),
+    "chi_so_hba1c": (Decimal(3), Decimal(20)),
     "birth_year": (1900, None),
     "visit_date": (date(2000, 1, 1), None),
 }
@@ -171,12 +171,12 @@ def check_icd_family(field, codes: str) -> Issue | None:
 
 
 __all__ = [
-    "parse_measurement",
-    "glucose_to_mmol",
-    "check_numeric",
-    "check_birth_year",
-    "check_visit_date",
-    "check_person_name",
-    "check_icd_family",
     "BOUNDS",
+    "check_birth_year",
+    "check_icd_family",
+    "check_numeric",
+    "check_person_name",
+    "check_visit_date",
+    "glucose_to_mmol",
+    "parse_measurement",
 ]

@@ -2,35 +2,78 @@ from __future__ import annotations
 
 import hashlib
 import re
+from typing import Any
 
 import pandas as pd
 
-from backend.domain.processing.transformation.normalization import normalized_token
+from backend.domain.processing.transformation.normalization import (
+    normalize_identifier,
+    normalized_token,
+)
+
+_CCCD_RE = re.compile(r"^\d{12}$")
 
 
-def _normalize_identity_field(value) -> str:
+def _normalize_identity_field(value: Any) -> str:
     token = normalized_token(value) or ""
     return re.sub(r"\s+", " ", token).strip()
 
 
-def resolve_patient_key(ho_ten, nam_sinh, dia_chi) -> str:
-    """Hash the normalized name, birth year, and address identity tuple."""
+def _normalized_cccd(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    normalized = normalize_identifier(value)
+    if normalized is None or not normalized.strip():
+        return None
+    return normalized.strip()
+
+
+def resolve_patient_key(
+    cccd: Any = None,
+    ho_ten: Any = None,
+    nam_sinh: Any = None,
+    dia_chi: Any = None,
+) -> str:
+    """Resolve identity from CCCD, or from the normalized fallback tuple.
+
+    A non-empty CCCD is an identity assertion: it must be a 12-digit value.
+    This deliberately raises for malformed assertions so the pipeline can
+    drop only that row and report an aggregate count.
+    """
+
+    normalized_cccd = _normalized_cccd(cccd)
+    if normalized_cccd is not None:
+        if not _CCCD_RE.fullmatch(normalized_cccd):
+            raise ValueError("invalid CCCD")
+        return hashlib.sha256(f"cccd|{normalized_cccd}".encode()).hexdigest()
 
     parts = [_normalize_identity_field(v) for v in (ho_ten, nam_sinh, dia_chi)]
-    joined = "|".join(parts)
+    joined = "fallback|" + "|".join(parts)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 def add_patient_key(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy with the contract identity hash in ``patient_key``."""
+    """Return a copy with one stable identity key per row.
+
+    Invalid non-empty CCCD values raise ``ValueError``.  The pipeline uses
+    the same resolver row-by-row so it can drop invalid rows and log a count.
+    """
 
     result = frame.copy()
-    result["patient_key"] = result.apply(
-        lambda row: resolve_patient_key(
-            row.get("ho_ten"), row.get("nam_sinh"), row.get("dia_chi")
-        ),
-        axis=1,
-    )
+    result["patient_key"] = [
+        resolve_patient_key(
+            row.get("cccd"),
+            row.get("ho_ten"),
+            row.get("nam_sinh"),
+            row.get("dia_chi"),
+        )
+        for _, row in result.iterrows()
+    ]
     return result
 
 

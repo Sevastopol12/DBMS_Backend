@@ -62,4 +62,4 @@ def normalized_token(value: Any) -> str | None:
     return "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
 
 
-__all__ = ["normalize_header", "clean_optional_text", "normalized_token"]
+__all__ = ["clean_optional_text", "normalize_header", "normalized_token"]
