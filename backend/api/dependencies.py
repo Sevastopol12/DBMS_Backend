@@ -2,6 +2,8 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from backend.api.auth.dependencies import require_session
+from backend.api.auth.sessions import AuthSession
 from backend.api.metrics_service import MetricsService
 from backend.api.resources import ApiResources
 from backend.database.service import IngestionRepository, StorageService
@@ -93,6 +95,8 @@ AcceptedDataRepositoryDep = Annotated[
     AcceptedDataRepository, Depends(get_accepted_data_repository)
 ]
 
+SessionDep = Annotated[AuthSession, Depends(require_session)]
+
 
 __all__ = [
     "AcceptedDataRepositoryDep",
@@ -102,6 +106,7 @@ __all__ = [
     "MetricsRepositoryDep",
     "MetricsServiceDep",
     "ResourcesDep",
+    "SessionDep",
     "StorageServiceDep",
     "WorkflowRunRepositoryDep",
     "get_accepted_data_repository",
