@@ -5,7 +5,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, PlainSerializer
 
-from backend.database.service.metrics.scope import MetricsScope
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
 from backend.timezone import VIETNAM_TZ, VIETNAM_TZ_NAME
@@ -38,7 +37,7 @@ class IssueCodeCount(BaseModel):
 
 
 class PeriodSummaryMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
@@ -65,7 +64,7 @@ class PeriodSummaryMetric(BaseModel):
 
 
 class ComorbidityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     diagnosis_label: str
@@ -75,7 +74,7 @@ class ComorbidityMetric(BaseModel):
 
 class PatientStateMetric(BaseModel):
     patient_key: str
-    facility_id: UUID | None
+    facility_id: UUID
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -95,16 +94,16 @@ class PatientStateMetric(BaseModel):
 
 
 class DataQualityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
     files_processed: int
     avg_mapping_coverage_ratio: float | None = Field(default=None, allow_inf_nan=False)
     total_rows_seen: int
-    accepted_clean_rows: int
-    accepted_with_flags_rows: int
+    accepted_rows: int
     rejected_rows: int
+    ignored_duplicate_row_count: int
     top_issue_codes: list[IssueCodeCount]
     computed_at: ApiDateTime
 
@@ -154,24 +153,6 @@ class MetricsFacilityQuery(BaseModel):
     facility_id: UUID | None = None
 
 
-def to_metrics_scope(
-    facility_id: UUID | Literal["ALL"] | None,
-    *,
-    allow_rollup: bool = True,
-) -> MetricsScope:
-    """Convert the wire-level facility selector to the repository scope."""
-
-    if facility_id is None:
-        return MetricsScope.all_facilities()
-    if facility_id == "ALL":
-        if not allow_rollup:
-            raise ValueError("rollup scope is invalid for patient state")
-        return MetricsScope.rollup()
-    if isinstance(facility_id, str):
-        raise ValueError("facility_id must be ALL or a UUID")  # noqa: TRY004 - validation failure contract is ValueError
-    return MetricsScope.facility(facility_id)
-
-
 def _get_safe_filename(filename: str) -> str:
     name = PurePath(filename).name
     if not name or name in {".", ".."}:
@@ -216,5 +197,4 @@ __all__ = [
     "PeriodSummaryMetric",
     "_get_safe_filename",
     "_serialize_ingestion",
-    "to_metrics_scope",
 ]
