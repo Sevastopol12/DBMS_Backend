@@ -241,7 +241,7 @@ class DuplicateRole(str, Enum):
 
 
 class RowDecision(BaseModel):
-    """One per REJECTED row and per MERGED row (WP-01 emits REJECTED only)."""
+    """A rejection decision or an accepted duplicate row decision."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -251,6 +251,17 @@ class RowDecision(BaseModel):
     merged_into_row: int | None = None
     group_row_numbers: list[int] = Field(default_factory=list)
     issue_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_duplicate_role(self) -> RowDecision:
+        if (
+            self.disposition is RowDisposition.ACCEPTED
+            and self.duplicate_role is not DuplicateRole.MERGED
+        ):
+            raise ValueError("accepted duplicate decisions must have MERGED role")
+        if self.duplicate_role is DuplicateRole.MERGED and self.merged_into_row is None:
+            raise ValueError("MERGED decisions must name merged_into_row")
+        return self
 
 
 class AcceptedRecord(BaseModel):
