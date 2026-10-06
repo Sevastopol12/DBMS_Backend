@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database.connection import RDBAsyncConnectionConfig
 from backend.database.errors import MetricsRunInProgress
 from backend.database.service.metrics.repository import MetricsRepository
-from backend.database.service.production.schema import SystemReport
+from backend.database.service.production.schema import Demographic, Measurement
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.computation.pipeline import ComputationPipeline, ComputationResult
 from backend.redis_cache.cache import MetricsCache
@@ -39,35 +39,96 @@ from backend.timezone import now_utc, start_of_day_vietnam
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "2"
+PIPELINE_VERSION = "3"
 _METRIC_GRAINS = ("3D", "2W", "3M", "6M", "TODAY", "ALL")
 _PERIOD_ROW_KEYS = (
-    "facility_id", "period_grain", "period_start", "period_end",
-    "visit_count", "unique_patient_count", "new_patient_count",
-    "returning_patient_count", "repeat_visit_ratio", "pct_tha", "pct_dtd",
-    "pct_comorbid", "bp_control_rate", "bp_stage_normal_count",
-    "bp_stage_elevated_count", "bp_stage_1_count", "bp_stage_2_count",
-    "bp_stage_severe_count", "glycemic_control_rate", "avg_glucose",
-    "median_glucose", "avg_hba1c", "median_hba1c", "computed_at",
+    "facility_id",
+    "period_grain",
+    "period_start",
+    "period_end",
+    "visit_count",
+    "unique_patient_count",
+    "new_patient_count",
+    "returning_patient_count",
+    "repeat_visit_ratio",
+    "pct_tha",
+    "pct_dtd",
+    "pct_comorbid",
+    "bp_control_rate",
+    "bp_stage_normal_count",
+    "bp_stage_elevated_count",
+    "bp_stage_1_count",
+    "bp_stage_2_count",
+    "bp_stage_severe_count",
+    "glycemic_control_rate",
+    "avg_glucose",
+    "median_glucose",
+    "avg_hba1c",
+    "median_hba1c",
+    "computed_at",
 )
 _COMORBIDITY_ROW_KEYS = (
-    "facility_id", "period_grain", "period_start", "diagnosis_label",
-    "patient_count", "computed_at",
+    "facility_id",
+    "period_grain",
+    "period_start",
+    "diagnosis_label",
+    "patient_count",
+    "computed_at",
 )
 _PATIENT_STATE_ROW_KEYS = (
-    "patient_key", "facility_id", "ho_ten", "sdt", "dia_chi",
-    "last_visit_date", "last_systolic", "last_diastolic", "last_glucose",
-    "last_hba1c", "is_bp_controlled", "is_bp_severe", "is_hba1c_controlled",
-    "is_out_of_control", "has_contact", "first_visit_date", "visit_count",
+    "patient_key",
+    "facility_id",
+    "ho_ten",
+    "sdt",
+    "dia_chi",
+    "last_visit_date",
+    "last_systolic",
+    "last_diastolic",
+    "last_glucose",
+    "last_hba1c",
+    "is_bp_controlled",
+    "is_bp_severe",
+    "is_hba1c_controlled",
+    "is_out_of_control",
+    "has_contact",
+    "first_visit_date",
+    "visit_count",
     "computed_at",
 )
 _DATA_QUALITY_ROW_KEYS = (
-    "facility_id", "period_grain", "period_start", "period_end",
-    "files_processed", "avg_mapping_coverage_ratio", "total_rows_seen",
-    "accepted_clean_rows", "accepted_with_flags_rows", "rejected_rows",
-    "top_issue_codes", "computed_at",
+    "facility_id",
+    "period_grain",
+    "period_start",
+    "period_end",
+    "files_processed",
+    "avg_mapping_coverage_ratio",
+    "total_rows_seen",
+    "accepted_rows",
+    "rejected_rows",
+    "ignored_duplicate_row_count",
+    "top_issue_codes",
+    "computed_at",
 )
-_REPORT_COLUMNS = tuple(SystemReport.__table__.columns)
+_REPORT_COLUMNS = (
+    Demographic.facility_id,
+    Demographic.cccd,
+    Demographic.ngay_kham,
+    Demographic.ho_ten,
+    Demographic.nam_sinh,
+    Demographic.sdt,
+    Demographic.gioi_tinh,
+    Demographic.dia_chi,
+    Demographic.ma_bhyt,
+    Demographic.ghi_chu,
+    Demographic.dieu_tri,
+    Measurement.icd_tha,
+    Measurement.icd_dtd,
+    Measurement.chan_doan_di_kem,
+    Measurement.huyet_ap_tam_truong,
+    Measurement.huyet_ap_tam_thu,
+    Measurement.chi_so_duong_huyet,
+    Measurement.chi_so_hba1c,
+)
 
 
 @dataclass(frozen=True)
@@ -118,8 +179,8 @@ def compute_fingerprint(
     return hashlib.sha256(canonical).hexdigest()
 
 
-def _stats_from_result(result: Any) -> tuple[Any, Any]:
-    """Extract the two values returned by a count/max aggregate query."""
+def _stats_from_result(result: Any) -> tuple[Any, ...]:
+    """Extract the values returned by a count/max aggregate query."""
 
     row = result.one()
     if hasattr(row, "_mapping"):
@@ -128,22 +189,40 @@ def _stats_from_result(result: Any) -> tuple[Any, Any]:
         values = tuple(row.values())
     else:
         values = tuple(row)
-    if len(values) != 2:  # pragma: no cover - protects against query drift
+    if not values:  # pragma: no cover - protects against query drift
         raise RuntimeError("input stats query returned an unexpected shape")
-    return values[0], values[1]
+    return values
 
 
 async def _fetch_input_stats(
     production: RDBAsyncConnectionConfig,
     staging: RDBAsyncConnectionConfig,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Fetch the small fingerprint inputs in separate, short-lived sessions."""
+    """Fetch the small fingerprint inputs in separate, short-lived sessions.
+
+    Fingerprint (D-10): ``(count, max(source_file_uploaded_at),
+    max(uploaded_at))`` over both accepted tables plus file stats, so an
+    in-place record replacement changes the digest even though the row
+    count is unchanged.
+    """
 
     async with production.async_session_local() as session:
         result = await session.execute(
-            select(func.count(SystemReport.id), func.max(SystemReport.id))
+            select(
+                func.count(Demographic.id),
+                func.max(Demographic.source_file_uploaded_at),
+                func.max(Demographic.uploaded_at),
+            )
         )
-        report_count, report_max_id = _stats_from_result(result)
+        demo_count, demo_max_source, demo_max_uploaded = _stats_from_result(result)
+        result = await session.execute(
+            select(
+                func.count(Measurement.id),
+                func.max(Measurement.source_file_uploaded_at),
+                func.max(Measurement.uploaded_at),
+            )
+        )
+        meas_count, meas_max_source, meas_max_uploaded = _stats_from_result(result)
 
     async with staging.async_session_local() as session:
         result = await session.execute(
@@ -152,15 +231,36 @@ async def _fetch_input_stats(
         file_count, file_max_completed_at = _stats_from_result(result)
 
     return (
-        {"count": report_count, "max_id": report_max_id},
+        {
+            "demographic": {
+                "count": demo_count,
+                "max_source_file_uploaded_at": demo_max_source,
+                "max_uploaded_at": demo_max_uploaded,
+            },
+            "measurement": {
+                "count": meas_count,
+                "max_source_file_uploaded_at": meas_max_source,
+                "max_uploaded_at": meas_max_uploaded,
+            },
+        },
         {"count": file_count, "max_completed_at": file_max_completed_at},
     )
 
 
 async def _fetch_report_df(session: AsyncSession) -> pd.DataFrame:
-    """Fetch accepted report rows as flat mapping records."""
+    """Fetch accepted visits via the §4.8 Demographic⨝Measurement join."""
 
-    result = await session.execute(select(*SystemReport.__table__.columns))
+    statement = (
+        select(*_REPORT_COLUMNS)
+        .select_from(Demographic)
+        .join(
+            Measurement,
+            (Measurement.facility_id == Demographic.facility_id)
+            & (Measurement.cccd == Demographic.cccd)
+            & (Measurement.ngay_kham == Demographic.ngay_kham),
+        )
+    )
+    result = await session.execute(statement)
     return pd.DataFrame(result.mappings().all())
 
 
@@ -189,8 +289,6 @@ def _canonical_row(row: dict, family: str, computed_at: datetime) -> dict:
         "is_bp_crisis": "is_bp_severe",
         "bp_stage_crisis_count": "bp_stage_severe_count",
         "avg_coverage_ratio": "avg_mapping_coverage_ratio",
-        "accepted_rows": "accepted_clean_rows",
-        "flagged_rows": "accepted_with_flags_rows",
     }
     for old, new in aliases.items():
         if old in value and new not in value:
@@ -202,26 +300,36 @@ def _canonical_row(row: dict, family: str, computed_at: datetime) -> dict:
     return value
 
 
-def _canonical_result(result: ComputationResult, computed_at: datetime) -> ComputationResult:
+def _canonical_result(
+    result: ComputationResult, computed_at: datetime
+) -> ComputationResult:
     return ComputationResult(
         period_summary_rows=[
-            {key: _canonical_row(row, "period", computed_at).get(key)
-             for key in _PERIOD_ROW_KEYS}
+            {
+                key: _canonical_row(row, "period", computed_at).get(key)
+                for key in _PERIOD_ROW_KEYS
+            }
             for row in result.period_summary_rows
         ],
         comorbidity_rows=[
-            {key: _canonical_row(row, "comorbidity", computed_at).get(key)
-             for key in _COMORBIDITY_ROW_KEYS}
+            {
+                key: _canonical_row(row, "comorbidity", computed_at).get(key)
+                for key in _COMORBIDITY_ROW_KEYS
+            }
             for row in result.comorbidity_rows
         ],
         patient_state_rows=[
-            {key: _canonical_row(row, "patient", computed_at).get(key)
-             for key in _PATIENT_STATE_ROW_KEYS}
+            {
+                key: _canonical_row(row, "patient", computed_at).get(key)
+                for key in _PATIENT_STATE_ROW_KEYS
+            }
             for row in result.patient_state_rows
         ],
         data_quality_rows=[
-            {key: _canonical_row(row, "quality", computed_at).get(key)
-             for key in _DATA_QUALITY_ROW_KEYS}
+            {
+                key: _canonical_row(row, "quality", computed_at).get(key)
+                for key in _DATA_QUALITY_ROW_KEYS
+            }
             for row in result.data_quality_rows
         ],
         rows_processed=result.rows_processed,
@@ -253,42 +361,39 @@ def _write_metrics_cache(
         "patient": canonical.patient_state_rows,
         "quality": canonical.data_quality_rows,
     }
-    facility_tokens = sorted({
-        str(row["facility_id"])
-        for rows in families.values()
-        for row in rows
-        if row.get("facility_id") is not None
-    })
-    scope_tokens = ("all", "rollup", *facility_tokens)
+    facility_tokens = sorted(
+        {
+            str(row["facility_id"])
+            for rows in families.values()
+            for row in rows
+            if row.get("facility_id") is not None
+        }
+    )
     expected: dict[str, list[dict]] = {}
 
-    def scoped(rows: list[dict], scope: str) -> list[dict]:
-        if scope == "all":
-            return [row for row in rows if row.get("facility_id") is not None]
-        if scope == "rollup":
-            return [row for row in rows if row.get("facility_id") is None]
-        return [row for row in rows if str(row.get("facility_id")) == scope]
+    def scoped(rows: list[dict], facility: str) -> list[dict]:
+        return [row for row in rows if str(row.get("facility_id")) == facility]
 
-    for scope in scope_tokens:
+    for facility in facility_tokens:
         for grain in _METRIC_GRAINS:
-            rows = scoped(families["period"], scope)
+            rows = scoped(families["period"], facility)
             rows = [row for row in rows if str(row.get("period_grain")) == grain]
-            expected[period_summary_key(scope, grain)] = sort_period_summary(rows)
+            expected[period_summary_key(facility, grain)] = sort_period_summary(rows)
 
-            rows = scoped(families["comorbidity"], scope)
+            rows = scoped(families["comorbidity"], facility)
             rows = [row for row in rows if str(row.get("period_grain")) == grain]
-            expected[comorbidity_key(scope, grain)] = sort_comorbidity(rows)
+            expected[comorbidity_key(facility, grain)] = sort_comorbidity(rows)
 
-            rows = scoped(families["quality"], scope)
+            rows = scoped(families["quality"], facility)
             rows = [row for row in rows if str(row.get("period_grain")) == grain]
-            expected[data_quality_key(scope, grain)] = sort_data_quality(rows)
+            expected[data_quality_key(facility, grain)] = sort_data_quality(rows)
 
-        if scope != "rollup":
-            rows = [
-                row for row in scoped(families["patient"], scope)
-                if row.get("is_out_of_control") is True
-            ]
-            expected[out_of_control_key(scope)] = sort_out_of_control(rows)
+        rows = [
+            row
+            for row in scoped(families["patient"], facility)
+            if row.get("is_out_of_control") is True
+        ]
+        expected[out_of_control_key(facility)] = sort_out_of_control(rows)
 
     for key, value in expected.items():
         _write_cache_value(cache, key, value)

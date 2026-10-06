@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+from uuid import UUID
 
 METRICS_CACHE_TTL_SECONDS = 3000
 LAST_COMPUTED_AT_KEY = "metrics:last_computed_at"
@@ -17,22 +18,24 @@ METRICS_CACHE_PREFIXES = (
 )
 
 
-def period_summary_key(scope: str, grain: str) -> str:
-    return f"{PERIOD_SUMMARY_PREFIX}{scope}:{grain}"
+def _facility_token(facility_id: UUID | str) -> str:
+    return str(facility_id)
 
 
-def comorbidity_key(scope: str, grain: str) -> str:
-    return f"{COMORBIDITY_PREFIX}{scope}:{grain}"
+def period_summary_key(facility_id: UUID | str, grain: str) -> str:
+    return f"{PERIOD_SUMMARY_PREFIX}{_facility_token(facility_id)}:{grain}"
 
 
-def out_of_control_key(scope: str) -> str:
-    if scope == "rollup":
-        raise ValueError("rollup scope is invalid for patient state")
-    return f"{OUT_OF_CONTROL_PREFIX}{scope}"
+def comorbidity_key(facility_id: UUID | str, grain: str) -> str:
+    return f"{COMORBIDITY_PREFIX}{_facility_token(facility_id)}:{grain}"
 
 
-def data_quality_key(scope: str, grain: str) -> str:
-    return f"{DATA_QUALITY_PREFIX}{scope}:{grain}"
+def out_of_control_key(facility_id: UUID | str) -> str:
+    return f"{OUT_OF_CONTROL_PREFIX}{_facility_token(facility_id)}"
+
+
+def data_quality_key(facility_id: UUID | str, grain: str) -> str:
+    return f"{DATA_QUALITY_PREFIX}{_facility_token(facility_id)}:{grain}"
 
 
 def _sorted_rows(
