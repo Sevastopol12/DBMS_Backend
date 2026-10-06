@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 
+from backend.api.auth import auth_router
 from backend.api.resources import api_lifespan
 from backend.api.routes import (
     fetch_router,
@@ -14,6 +15,7 @@ configure_logging("api")
 app = FastAPI(lifespan=api_lifespan)
 
 app.include_router(health_router)
+app.include_router(auth_router, prefix="/auth/v1")
 app.include_router(upload_router, prefix="/upload/v1")
 app.include_router(fetch_router, prefix="/fetch/v1")
 app.include_router(metrics_router, prefix="/metrics/v1")
