@@ -56,17 +56,6 @@ OPTIONAL_CLINICAL_FIELDS: tuple[str, ...] = (
 ACCEPTANCE_FIELDS: tuple[str, ...] = REQUIRED_CANONICAL_FIELDS
 
 
-def is_canonical_field(name: str) -> bool:
-    return name in CANONICAL_FIELD_SET
-
-
-def canonical_field(name: str) -> CanonicalField:
-    for field in CANONICAL_FIELDS:
-        if field.name == name:
-            return field
-    raise KeyError(f"Unknown canonical field: {name}")
-
-
 __all__ = [
     "ACCEPTANCE_FIELDS",
     "CANONICAL_FIELDS",
@@ -75,6 +64,4 @@ __all__ = [
     "OPTIONAL_CLINICAL_FIELDS",
     "REQUIRED_CANONICAL_FIELDS",
     "CanonicalField",
-    "canonical_field",
-    "is_canonical_field",
 ]
