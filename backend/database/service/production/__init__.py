@@ -1,11 +1,15 @@
-from .repository import BulkInsertResult, ReplaceResult, ReportRepository, ReviewInput
-from .schema import ReviewRecord, SystemReport
+from .schema import (
+    DEMOGRAPHIC_FIELDS,
+    MEASUREMENT_FIELDS,
+    Demographic,
+    Measurement,
+    ReviewRecord,
+)
 
 __all__ = [
-    "BulkInsertResult",
-    "ReplaceResult",
-    "ReportRepository",
-    "ReviewInput",
+    "DEMOGRAPHIC_FIELDS",
+    "MEASUREMENT_FIELDS",
+    "Demographic",
+    "Measurement",
     "ReviewRecord",
-    "SystemReport",
 ]
