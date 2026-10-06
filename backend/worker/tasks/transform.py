@@ -2,11 +2,8 @@ from asyncio import run
 from uuid import UUID
 
 from backend.database import load_header_mappings
-from backend.database.service import (
-    IngestionRepository,
-    ReportRepository,
-    StorageService,
-)
+from backend.database.service import IngestionRepository, StorageService
+from backend.database.service.production.persistence import AcceptedDataPersistence
 from backend.domain.processing.mapping.source.mapping_gateway import get_mapping_gateway
 
 from ..app import celery
@@ -23,7 +20,7 @@ async def _transform(task_id: UUID):
     async with task_resources() as res:
         processor = FileProcessor(
             staging_repository=IngestionRepository(res.staging),
-            production_repository=ReportRepository(res.production),
+            persistence=AcceptedDataPersistence(res.production),
             storage=StorageService(res.storage),
             mapping_provider=get_mapping_gateway(db_loader=load_header_mappings),
         )

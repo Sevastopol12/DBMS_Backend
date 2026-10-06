@@ -6,7 +6,7 @@ from backend.api.metrics_service import MetricsService
 from backend.api.resources import ApiResources
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.metrics.repository import MetricsRepository
-from backend.database.service.production.repository import ReportRepository
+from backend.database.service.production.repository import AcceptedDataRepository
 from backend.database.service.staging.workflow_repository import WorkflowRunRepository
 from backend.domain.processing.mapping.legacy.legacy_cache import MappingCache
 from backend.redis_cache.cache import MetricsCache
@@ -83,31 +83,33 @@ WorkflowRunRepositoryDep = Annotated[
 ]
 
 
-def get_report_repository(
+def get_accepted_data_repository(
     res: ResourcesDep,
-) -> ReportRepository:
-    return ReportRepository(config=res.application)
+) -> AcceptedDataRepository:
+    return AcceptedDataRepository(config=res.application)
 
 
-ReportRepositoryDep = Annotated[ReportRepository, Depends(get_report_repository)]
+AcceptedDataRepositoryDep = Annotated[
+    AcceptedDataRepository, Depends(get_accepted_data_repository)
+]
 
 
 __all__ = [
+    "AcceptedDataRepositoryDep",
     "IngestionRepositoryDep",
     "MappingCacheDep",
     "MetricsCacheDep",
     "MetricsRepositoryDep",
     "MetricsServiceDep",
-    "ReportRepositoryDep",
     "ResourcesDep",
     "StorageServiceDep",
     "WorkflowRunRepositoryDep",
+    "get_accepted_data_repository",
     "get_ingestion_repository",
     "get_mapping_cache",
     "get_metrics_cache",
     "get_metrics_repository",
     "get_metrics_service",
-    "get_report_repository",
     "get_resources",
     "get_storage_service",
     "get_workflow_repository",
