@@ -42,9 +42,7 @@ class MetricPeriodSummary(Base):
         ForeignKey("Metrics.computation_run_log.run_id"),
         nullable=False,
     )
-    facility_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     period_grain: Mapped[str] = mapped_column(Text, nullable=False)
     period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -124,9 +122,7 @@ class MetricComorbidityBreakdown(Base):
         ForeignKey("Metrics.computation_run_log.run_id"),
         nullable=False,
     )
-    facility_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     period_grain: Mapped[str] = mapped_column(Text, nullable=False)
     period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -150,9 +146,7 @@ class PatientCurrentState(Base):
         primary_key=True,
     )
     patient_key: Mapped[str] = mapped_column(Text, primary_key=True)
-    facility_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     ho_ten: Mapped[str | None] = mapped_column(Text, nullable=True)
     sdt: Mapped[str | None] = mapped_column(Text, nullable=True)
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -204,9 +198,7 @@ class MetricDataQualitySummary(Base):
         ForeignKey("Metrics.computation_run_log.run_id"),
         nullable=False,
     )
-    facility_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     period_grain: Mapped[str] = mapped_column(Text, nullable=False)
     period_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -223,13 +215,13 @@ class MetricDataQualitySummary(Base):
     total_rows_seen: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    accepted_clean_rows: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
-    accepted_with_flags_rows: Mapped[int] = mapped_column(
+    accepted_rows: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     rejected_rows: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    ignored_duplicate_row_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     top_issue_codes: Mapped[list] = mapped_column(
