@@ -343,9 +343,9 @@ class IngestionRepository:
             )
             return list(result.scalars().all())
 
-    # 
+    #
     # Read side (ops dashboard)
-    # 
+    #
 
     async def status_counts(self, *, facility_id: UUID | None = None) -> dict[str, int]:
         stmt = select(FileInfo.status, func.count().label("n")).group_by(
@@ -444,9 +444,9 @@ class IngestionRepository:
             d["quality_report"] = row.quality_report
             return d
 
-    # 
+    #
     # Rejection artifact + facility-scoped lineage (WP-06, migration 011)
-    # 
+    #
 
     async def set_artifact(
         self, file_id: UUID, key: str, expires_at: datetime

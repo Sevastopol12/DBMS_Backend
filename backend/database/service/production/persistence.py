@@ -295,7 +295,7 @@ class AcceptedDataPersistence:
         self, session: Any, rows: list[dict[str, Any]]
     ) -> set[tuple[str, datetime]]:
         applied: set[tuple[str, datetime]] = set()
-        
+
         for chunk in _chunks(rows, _CHUNK_SIZE):
             update_columns = sorted(set(chunk[0].keys()) - _KEY_COLUMNS)
             stmt = pg_insert(Demographic).values(chunk)

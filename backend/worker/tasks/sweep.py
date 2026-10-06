@@ -12,7 +12,11 @@ from .transform import transform
 
 @celery.task(bind=True, name="backend.worker.tasks.sweep.transform_sweep")
 def transform_sweep(self, trigger: str = "SCHEDULED") -> None:
-    run(_transform_sweep(trigger=trigger, celery_task_id=getattr(self.request, "id", None)))
+    run(
+        _transform_sweep(
+            trigger=trigger, celery_task_id=getattr(self.request, "id", None)
+        )
+    )
 
 
 async def _transform_sweep(*, trigger: str, celery_task_id: str | None = None) -> None:
