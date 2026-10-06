@@ -80,11 +80,9 @@ def _same_facility(value: Any, facility_id: Any) -> bool:
 def _facility_slice(frame: pd.DataFrame, facility_id: Any) -> pd.DataFrame:
     if "facility_id" not in frame:
         return frame.iloc[0:0].copy()
-    return frame.loc[frame["facility_id"].map(lambda value: _same_facility(value, facility_id))]
-
-
-def _scope(frame: pd.DataFrame, facility_id: Any) -> pd.DataFrame:
-    return frame if facility_id is None else _facility_slice(frame, facility_id)
+    return frame.loc[
+        frame["facility_id"].map(lambda value: _same_facility(value, facility_id))
+    ]
 
 
 def _normalize_run_at(run_at: datetime) -> datetime:
@@ -121,10 +119,8 @@ def _identity_frame(frame: pd.DataFrame) -> pd.DataFrame:
     for index, row in frame.iterrows():
         try:
             key = resolve_patient_key(
+                row.get("facility_id"),
                 row.get("cccd"),
-                row.get("ho_ten"),
-                row.get("nam_sinh"),
-                row.get("dia_chi"),
             )
         except ValueError:
             dropped += 1
@@ -201,7 +197,9 @@ class ComputationPipeline:
         files = _normalize_files(files_df)
 
         if "ngay_kham" in report:
-            report = report.loc[report["ngay_kham"].notna() & report["ngay_kham"].lt(cutoff)].copy()
+            report = report.loc[
+                report["ngay_kham"].notna() & report["ngay_kham"].lt(cutoff)
+            ].copy()
 
         first_visits: dict[str, Any] = {}
         if not report.empty:
@@ -210,8 +208,8 @@ class ComputationPipeline:
         period_rows: list[dict] = []
         comorbidity_rows: list[dict] = []
         report_facilities = source_report_facilities
-        for facility_id in [*report_facilities, None] if not report_df.empty else []:
-            scope = _scope(report, facility_id)
+        for facility_id in report_facilities if not report_df.empty else []:
+            scope = _facility_slice(report, facility_id)
             for window in build_period_windows(normalized_run_at):
                 period = scope.loc[_date_mask(scope, window.start, window.end)]
                 period_rows.append(
@@ -239,7 +237,9 @@ class ComputationPipeline:
             historical = scope.loc[scope["ngay_kham"].lt(cutoff)]
             if not historical.empty:
                 window = all_window(historical["ngay_kham"].min(), normalized_run_at)
-                period = historical.loc[_date_mask(historical, window.start, window.end)]
+                period = historical.loc[
+                    _date_mask(historical, window.start, window.end)
+                ]
                 if not period.empty:
                     period_rows.append(
                         _summary_row(
@@ -290,11 +290,13 @@ class ComputationPipeline:
 
         cutoff = pd.Timestamp(to_local_naive(pd.Timestamp(run_at)))
         rows: list[dict] = []
-        for facility_id in [*facilities, None]:
-            scope = _scope(files, facility_id)
+        for facility_id in facilities:
+            scope = _facility_slice(files, facility_id)
             eligible_quality = quality_eligible_mask(scope)
             if not eligible_quality.index.equals(scope.index):
-                eligible_quality = eligible_quality.reindex(scope.index, fill_value=False)
+                eligible_quality = eligible_quality.reindex(
+                    scope.index, fill_value=False
+                )
             for window in build_period_windows(run_at):
                 period = scope.loc[_completed_mask(scope, window.start, window.end)]
                 row = compute_data_quality(
