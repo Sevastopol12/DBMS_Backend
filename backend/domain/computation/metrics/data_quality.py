@@ -13,6 +13,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+QUALITY_SCHEMA_VERSION = 2
+
 
 def _quality_report(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
@@ -32,13 +34,23 @@ def _number(report: dict[str, Any], field: str) -> int:
         return 0
 
 
+def _is_eligible(report: dict[str, Any]) -> bool:
+    return (
+        bool(report) and report.get("quality_schema_version") == QUALITY_SCHEMA_VERSION
+    )
+
+
 def _eligible_reports(files: pd.DataFrame) -> list[dict[str, Any]]:
-    values = files["quality_report"] if "quality_report" in files else pd.Series(dtype=object)
+    values = (
+        files["quality_report"]
+        if "quality_report" in files
+        else pd.Series(dtype=object)
+    )
     reports: list[dict[str, Any]] = []
     skipped = 0
     for value in values.tolist():
         report = _quality_report(value)
-        if report and "accepted_clean_rows" in report:
+        if _is_eligible(report):
             reports.append(report)
         else:
             skipped += 1
@@ -48,13 +60,12 @@ def _eligible_reports(files: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def quality_eligible_mask(files: pd.DataFrame) -> pd.Series:
-    values = files["quality_report"] if "quality_report" in files else pd.Series(dtype=object)
-    return values.map(
-        lambda value: bool(
-            (report := _quality_report(value))
-            and "accepted_clean_rows" in report
-        )
+    values = (
+        files["quality_report"]
+        if "quality_report" in files
+        else pd.Series(dtype=object)
     )
+    return values.map(lambda value: _is_eligible(_quality_report(value)))
 
 
 def compute_data_quality(
@@ -65,7 +76,7 @@ def compute_data_quality(
     period_start: datetime | pd.Timestamp | None = None,
     period_end: datetime | pd.Timestamp | None = None,
 ) -> dict[str, Any]:
-    """Aggregate only current-schema quality reports in one period slice."""
+    """Aggregate only v2 quality reports in one period slice."""
 
     reports = _eligible_reports(files)
     coverage: list[float] = []
@@ -91,18 +102,22 @@ def compute_data_quality(
         "period_start": period_start,
         "period_end": period_end,
         "files_processed": len(reports),
-        "avg_mapping_coverage_ratio": sum(coverage) / len(coverage) if coverage else None,
+        "avg_mapping_coverage_ratio": sum(coverage) / len(coverage)
+        if coverage
+        else None,
         "total_rows_seen": sum(_number(report, "total_rows") for report in reports),
-        "accepted_clean_rows": sum(_number(report, "accepted_clean_rows") for report in reports),
-        "accepted_with_flags_rows": sum(
-            _number(report, "accepted_with_flags_rows") for report in reports
-        ),
+        "accepted_rows": sum(_number(report, "accepted_rows") for report in reports),
         "rejected_rows": sum(_number(report, "rejected_rows") for report in reports),
+        "ignored_duplicate_row_count": sum(
+            _number(report, "ignored_duplicate_row_count") for report in reports
+        ),
         "top_issue_codes": [
             {"code": code, "count": count}
-            for code, count in sorted(issue_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+            for code, count in sorted(
+                issue_counts.items(), key=lambda item: (-item[1], item[0])
+            )[:10]
         ],
     }
 
 
-__all__ = ["compute_data_quality", "quality_eligible_mask"]
+__all__ = ["QUALITY_SCHEMA_VERSION", "compute_data_quality", "quality_eligible_mask"]
