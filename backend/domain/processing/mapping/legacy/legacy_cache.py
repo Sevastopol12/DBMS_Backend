@@ -121,20 +121,8 @@ class MappingCache:
 
         return MappingResponse(filename=map_request.filename, mapping=map_result)
 
-    def get_metrics(self):
-        return self.client.hget(os.getenv("METRICS"))
-
-
-def get_application_cache() -> MappingCache:
-    redis_client: Redis = Redis(
-        host=os.getenv("CACHE_HOST"), port=os.getenv("CACHE_PORT")
-    )
-    return MappingCache(redis_client)
-
-
 __all__ = [
     "MappingCache",
     "MappingRequest",
     "MappingResponse",
-    "get_application_cache",
 ]
