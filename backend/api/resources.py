@@ -50,6 +50,16 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         stack.push_async_callback(dispose_connection, application)
         try:
             await probe_connection(application)
+            async with application.async_engine.connect() as conn:
+                from sqlalchemy import text
+
+                result = await conn.execute(
+                    text("SELECT to_regclass('\"Auth\".app_user')")
+                )
+                if result.scalar_one_or_none() is None:
+                    raise RuntimeError("Missing required table: Auth.app_user")
+        except RuntimeError:
+            raise
         except Exception as exc:  # noqa: BLE001 - startup probe: metrics db fails open
             logger.warning(
                 "metrics database unavailable during API startup: %s",
