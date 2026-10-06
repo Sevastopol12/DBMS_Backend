@@ -1,4 +1,5 @@
 """Small, process-local logging configuration shared by API and workers."""
+
 from __future__ import annotations
 
 import json
@@ -14,13 +15,16 @@ class _JsonFormatter(logging.Formatter):
         self.service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        return json.dumps({
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
-            "level": record.levelname,
-            "service": self.service,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+                "level": record.levelname,
+                "service": self.service,
+                "logger": record.name,
+                "message": record.getMessage(),
+            },
+            ensure_ascii=False,
+        )
 
 
 def configure_logging(service: str) -> None:
