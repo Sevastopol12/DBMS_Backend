@@ -43,7 +43,7 @@ def classify_bhxh(raw: object) -> tuple[str, Issue | None]:
     if re.fullmatch(r"[A-Z]{2}\d{13}", compact):
         return "legacy_15char", None
     if re.fullmatch(r"[A-Z0-9]{8,20}", compact):
-        return "legacy_unverified", Issue("SUSPICIOUS", "LEGACY_BHXH_UNVERIFIED")
+        return "legacy_unverified", Issue("INVALID", "LEGACY_BHXH_UNVERIFIED")
     return "unknown", Issue("INVALID", "INVALID_BHYT")
 
 

@@ -84,13 +84,19 @@ def _visit_date(value: Any) -> date | None:
 
 
 def _gender(value: Any) -> str | None:
-    if not isinstance(value, str) or value.strip().casefold() not in {"nam", "nữ", "nu"}:
+    if not isinstance(value, str) or value.strip().casefold() not in {
+        "nam",
+        "nữ",
+        "nu",
+    }:
         return None
     normalized = value.strip().casefold()
     return "Nam" if normalized == "nam" else "Nữ"
 
 
-def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossFieldIssue]:
+def check_row(
+    values: Mapping[str, Any], *, reference_date: date
+) -> list[CrossFieldIssue]:
     """Return PHI-safe cross-field findings; malformed inputs are skipped."""
 
     try:
@@ -102,7 +108,7 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
             issues.append(
                 CrossFieldIssue(
                     fields=("huyet_ap_tam_thu", "huyet_ap_tam_truong"),
-                    severity="SUSPICIOUS",
+                    severity="INFO",
                     code="BP_SYSTOLIC_NOT_ABOVE_DIASTOLIC",
                 )
             )
@@ -110,11 +116,14 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
         raw_cccd = _value(values, "cccd")
         decoded = decode_cccd(raw_cccd)
         if isinstance(raw_cccd, str) and re.fullmatch(r"\d{12}", raw_cccd) is not None:
-            if cccd_provinces.PROVINCE_CODES and raw_cccd[:3] not in cccd_provinces.PROVINCE_CODES:
+            if (
+                cccd_provinces.PROVINCE_CODES
+                and raw_cccd[:3] not in cccd_provinces.PROVINCE_CODES
+            ):
                 issues.append(
                     CrossFieldIssue(
                         fields=("cccd",),
-                        severity="SUSPICIOUS",
+                        severity="INFO",
                         code="CCCD_PROVINCE_UNKNOWN",
                     )
                 )
@@ -122,7 +131,7 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
                 issues.append(
                     CrossFieldIssue(
                         fields=("cccd",),
-                        severity="SUSPICIOUS",
+                        severity="INFO",
                         code="CCCD_UNDECODABLE",
                     )
                 )
@@ -132,7 +141,7 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
                 issues.append(
                     CrossFieldIssue(
                         fields=("cccd", "nam_sinh"),
-                        severity="SUSPICIOUS",
+                        severity="INFO",
                         code="CCCD_BIRTH_YEAR_MISMATCH",
                     )
                 )
@@ -141,7 +150,7 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
                 issues.append(
                     CrossFieldIssue(
                         fields=("cccd", "gioi_tinh"),
-                        severity="SUSPICIOUS",
+                        severity="INFO",
                         code="CCCD_GENDER_MISMATCH",
                     )
                 )
@@ -150,7 +159,9 @@ def check_row(values: Mapping[str, Any], *, reference_date: date) -> list[CrossF
         visit = _visit_date(_value(values, "ngay_kham"))
         if birth is not None and visit is not None:
             birth_date = birth[1]
-            before_birth = visit < birth_date if birth_date is not None else visit.year < birth[0]
+            before_birth = (
+                visit < birth_date if birth_date is not None else visit.year < birth[0]
+            )
             if before_birth:
                 issues.append(
                     CrossFieldIssue(

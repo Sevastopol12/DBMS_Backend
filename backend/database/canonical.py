@@ -27,13 +27,13 @@ CANONICAL_FIELDS: tuple[CanonicalField, ...] = (
     CanonicalField("sdt", str, required=True),
     CanonicalField("dia_chi", str),
     CanonicalField("ngay_kham", datetime, required=True),
-    CanonicalField("icd_tha", str),
-    CanonicalField("icd_dtd", str),
+    CanonicalField("icd_tha", str, required=True),
+    CanonicalField("icd_dtd", str, required=True),
     CanonicalField("chan_doan_di_kem", str),
-    CanonicalField("huyet_ap_tam_truong", str),
-    CanonicalField("huyet_ap_tam_thu", str),
-    CanonicalField("chi_so_duong_huyet", str),
-    CanonicalField("chi_so_hba1c", str),
+    CanonicalField("huyet_ap_tam_truong", str, required=True),
+    CanonicalField("huyet_ap_tam_thu", str, required=True),
+    CanonicalField("chi_so_duong_huyet", str, required=True),
+    CanonicalField("chi_so_hba1c", str, required=True),
     CanonicalField("ghi_chu", str),
     CanonicalField("dieu_tri", str),
 )
@@ -43,17 +43,15 @@ CANONICAL_FIELD_SET = frozenset(CANONICAL_FIELD_NAMES)
 REQUIRED_CANONICAL_FIELDS: tuple[str, ...] = tuple(
     field.name for field in CANONICAL_FIELDS if field.required
 )
-OPTIONAL_CLINICAL_FIELDS: tuple[str, ...] = (
-    "icd_tha",
-    "icd_dtd",
-    "huyet_ap_tam_truong",
-    "huyet_ap_tam_thu",
-    "chi_so_duong_huyet",
-    "chi_so_hba1c",
-)
 # A row is eligible for production only when every required canonical value
 # is valid. Keep this as the sole source of truth for row acceptance.
 ACCEPTANCE_FIELDS: tuple[str, ...] = REQUIRED_CANONICAL_FIELDS
+
+IDENTITY_FIELDS: tuple[str, ...] = ("cccd", "ngay_kham")
+FIELD_BY_NAME: dict[str, CanonicalField] = {f.name: f for f in CANONICAL_FIELDS}
+OPTIONAL_CANONICAL_FIELDS: tuple[str, ...] = tuple(
+    f.name for f in CANONICAL_FIELDS if not f.required
+)
 
 
 __all__ = [
@@ -61,7 +59,9 @@ __all__ = [
     "CANONICAL_FIELDS",
     "CANONICAL_FIELD_NAMES",
     "CANONICAL_FIELD_SET",
-    "OPTIONAL_CLINICAL_FIELDS",
+    "FIELD_BY_NAME",
+    "IDENTITY_FIELDS",
+    "OPTIONAL_CANONICAL_FIELDS",
     "REQUIRED_CANONICAL_FIELDS",
     "CanonicalField",
 ]
