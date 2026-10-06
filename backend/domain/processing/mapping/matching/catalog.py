@@ -92,7 +92,11 @@ class MappingCatalog:
     ) -> MappingEntry:
         """Build operation metadata for a target returned by the cache."""
         target = target.strip()
-        if normalize_header(target) == "dia_chi" and tier is not None and tier.upper() == "DYNAMIC":
+        if (
+            normalize_header(target) == "dia_chi"
+            and tier is not None
+            and tier.upper() == "DYNAMIC"
+        ):
             return MappingEntry(
                 alias=source.original_name,
                 concept="address_component",
