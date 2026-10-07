@@ -26,7 +26,7 @@ from backend.api.auth.tokens import verify_token
 from backend.api.resources import ApiResources
 from backend.database.service.auth.repository import AuthRepository
 
-auth_router = APIRouter()
+router = APIRouter()
 
 
 class LoginRequest(BaseModel):
@@ -46,7 +46,7 @@ def get_auth_service(
     return AuthService(settings, session_store, rate_limiter, repository)
 
 
-@auth_router.post("/login", response_model=None)
+@router.post("/login", response_model=None)
 async def login(
     req: LoginRequest,
     ip: Annotated[str, Depends(get_client_ip)],
@@ -72,7 +72,7 @@ async def login(
         )
 
 
-@auth_router.post("/logout", status_code=HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=HTTP_204_NO_CONTENT)
 async def logout(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     settings: Annotated[AuthSettings, Depends(get_auth_settings)],

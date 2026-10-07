@@ -1,10 +1,10 @@
 import uvicorn
 from fastapi import Depends, FastAPI
 
-from backend.api.auth import auth_router
 from backend.api.auth.dependencies import require_session
 from backend.api.resources import api_lifespan
 from backend.api.routes import (
+    auth_router,
     fetch_router,
     health_router,
     metrics_router,
