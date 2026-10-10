@@ -1,10 +1,9 @@
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel
 from starlette.status import (
     HTTP_204_NO_CONTENT,
     HTTP_401_UNAUTHORIZED,
@@ -23,15 +22,11 @@ from backend.api.auth.service import AuthenticationFailed, AuthService
 from backend.api.auth.sessions import AuthUnavailable, SessionStore
 from backend.api.auth.settings import AuthSettings
 from backend.api.auth.tokens import verify_token
+from backend.api.data_objects.auth import LoginRequest, LoginResponse
 from backend.api.resources import ApiResources
 from backend.database.service.auth.repository import AuthRepository
 
 router = APIRouter()
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
 
 def get_auth_service(
@@ -46,14 +41,15 @@ def get_auth_service(
     return AuthService(settings, session_store, rate_limiter, repository)
 
 
-@router.post("/login", response_model=None)
+@router.post("/login", response_model=LoginResponse)
 async def login(
     req: LoginRequest,
     ip: Annotated[str, Depends(get_client_ip)],
     service: Annotated[AuthService, Depends(get_auth_service)],
-) -> dict[str, Any]:
+) -> LoginResponse:
     try:
-        return await service.login(req.username, req.password, ip)
+        result = await service.login(req.username, req.password, ip)
+        return LoginResponse(**result)
     except RateLimitExceeded as e:
         headers = {"Retry-After": str(e.retry_after)}
         raise HTTPException(
