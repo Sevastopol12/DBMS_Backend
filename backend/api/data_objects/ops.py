@@ -80,6 +80,46 @@ class RunListResponse(BaseModel):
     items: list[dict]
 
 
+class WorkflowRunDetail(BaseModel):
+    # Mirrors WorkflowRunRepository._row_to_dict's key set; extra="allow"
+    # keeps this resilient to new columns the way FileDetailResponse above does.
+    model_config = {"extra": "allow"}
+
+    id: UUID
+    workflow_type: str
+    trigger_type: str
+    status: str
+    started_at: ApiDateTime | None = None
+    finished_at: ApiDateTime | None = None
+    items_seen: int
+    items_dispatched: int
+    items_skipped: int
+    items_failed: int
+    error_code: str | None = None
+    error_message: str | None = None
+    details: dict | None = None
+    celery_task_id: str | None = None
+    computation_run_id: UUID | None = None
+
+
+class ComputeRunItem(BaseModel):
+    # Mirrors MetricsRepository.recent_runs' selected columns.
+    model_config = {"extra": "allow"}
+
+    run_id: UUID
+    status: str
+    started_at: ApiDateTime | None = None
+    finished_at: ApiDateTime | None = None
+    rows_processed: int | None = None
+    error_message: str | None = None
+    computed_at: ApiDateTime | None = None
+    pruned_at: ApiDateTime | None = None
+
+
+class ComputeRunListResponse(BaseModel):
+    items: list[ComputeRunItem]
+
+
 class ScheduleEntry(BaseModel):
     name: str
     task: str
@@ -96,6 +136,8 @@ class ScheduleResponse(BaseModel):
 __all__ = [
     "ComputeRequest",
     "ComputeResponse",
+    "ComputeRunItem",
+    "ComputeRunListResponse",
     "FileDetailResponse",
     "FileListResponse",
     "FileSummaryResponse",
@@ -105,4 +147,5 @@ __all__ = [
     "ScheduleResponse",
     "TransformRequest",
     "TransformResponse",
+    "WorkflowRunDetail",
 ]
