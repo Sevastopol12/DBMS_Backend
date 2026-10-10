@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from backend.api.data_objects.ops import (
     ComputeRequest,
     ComputeResponse,
+    ComputeRunListResponse,
     FileDetailResponse,
     FileListResponse,
     FileSummaryResponse,
@@ -16,6 +17,7 @@ from backend.api.data_objects.ops import (
     ScheduleResponse,
     TransformRequest,
     TransformResponse,
+    WorkflowRunDetail,
 )
 from backend.api.dependencies import (
     AcceptedDataRepositoryDep,
@@ -123,7 +125,7 @@ async def get_runs(
     }
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}", response_model=WorkflowRunDetail)
 async def get_run(run_id: UUID, service: Service):
     value = await service.workflow.get(run_id)
     if value is None:
@@ -131,7 +133,7 @@ async def get_run(run_id: UUID, service: Service):
     return value
 
 
-@router.get("/compute/runs")
+@router.get("/compute/runs", response_model=ComputeRunListResponse)
 async def get_compute_runs(service: Service, limit: int = Query(20, ge=1, le=200)):
     try:
         return {"items": await service.metrics.recent_runs(limit=limit)}
