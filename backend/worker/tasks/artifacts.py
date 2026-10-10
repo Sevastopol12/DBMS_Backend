@@ -40,10 +40,12 @@ async def purge_expired_storage(
     now: datetime,
     limit: int,
 ) -> dict[str, int]:
-    """Delete expired artifact objects and clear their staging columns.
+    """Delete expired artifact objects and stamp their purged_at.
 
-    A missing object (already deleted out-of-band) is tolerated: the columns
-    are still cleared. Only counts are logged — never keys or row values.
+    The artifact key/expires columns are retained for audit; purged rows are
+    excluded from future sweeps via ``artifact_purged_at IS NULL``. A missing
+    object (already deleted out-of-band) is tolerated: purged_at is still
+    stamped. Only counts are logged — never keys or row values.
     """
 
     expired = await repository.list_expired_artifacts(now, limit)
@@ -55,7 +57,7 @@ async def purge_expired_storage(
             deleted += 1
         except FileObjectNotFound:
             missing += 1
-        await repository.clear_artifact(row.id)
+        await repository.mark_artifact_purged(row.id, now)
     logger.info(
         "purged expired rejection artifacts: expired=%d deleted=%d missing=%d",
         len(expired),

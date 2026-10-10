@@ -50,17 +50,21 @@ def compute_coverage(
             if first is not None and (end is None or first < end) and first >= start:
                 new_count += 1
 
-    returning_count = 0
+    returning_keys: set[str] = set()
     if unique_count and "patient_key" in frame:
         counts = keys.value_counts()
-        returning_count = int((counts >= 2).sum())
+        returning_keys.update(str(key) for key in counts[counts >= 2].index.tolist())
+        if start is not None:
+            for key in unique_keys:
+                first = _as_timestamp(first_dates.get(str(key)))
+                if first is not None and first < start and (end is None or first < end):
+                    returning_keys.add(str(key))
+    returning_count = len(returning_keys)
 
     return {
         "visit_count": len(frame),
         "unique_patient_count": unique_count,
         "new_patient_count": new_count,
         "returning_patient_count": returning_count,
-        "repeat_visit_ratio": (
-            returning_count / unique_count if unique_count else None
-        ),
+        "repeat_visit_ratio": (len(frame) / unique_count if unique_count else None),
     }

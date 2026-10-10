@@ -36,7 +36,9 @@ class FileInfo(Base):
 
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(default=FileStatus.CREATED)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default=FileStatus.CREATED
+    )
 
     content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -72,6 +74,17 @@ class FileInfo(Base):
     )
     rejection_artifact_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_artifact_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Migration 014: artifact lifecycle timestamps (no backfill).
+    # artifact_created_at records when the rejection object was written;
+    # artifact_purged_at records when the purge task deleted the object.
+    # The key/expires columns are retained after purge for audit.
+    artifact_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    artifact_purged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
-from backend.api.dto import ApiDateTime
+from backend.api.data_objects.common import ApiDateTime
 
 OpsStatus = Literal["QUEUED", "ERROR", "SUCCEED", "REJECTED"]
 
