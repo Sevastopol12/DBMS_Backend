@@ -187,6 +187,7 @@ class RejectedArtifactItem(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False)
 
     file_id: UUID
+    filename: str
     parent_file_id: UUID | None = None
     file_status: str
     state: Literal["available", "expired"]
