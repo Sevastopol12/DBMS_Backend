@@ -1,4 +1,4 @@
-"""XLSX rejection artifact generator (WP-06, Plan §4.7)."""
+"""XLSX rejection artifact generator"""
 
 from __future__ import annotations
 
@@ -72,15 +72,7 @@ def build_rejection_xlsx(
     file_level_reason: str | None,
     file_id: UUID,
 ) -> bytes:
-    """Build the user-editable rejection workbook from original source values.
-
-    Inclusion rules (Plan §4.7): every REJECTED row is included; when a
-    duplicate group is rejected all of its contributing rows are included;
-    accepted-group duplicates (ACCEPTED/MERGED decisions) are excluded. For
-    a file-level rejection every source row is included with
-    ``file_level_reason`` as its issue code. Cell values come from
-    ``source.rows`` (original values), never from normalized values.
-    """
+    """Build the user-editable rejection workbook from original source values."""
 
     rows_by_number: dict[int, dict[str, object | None]] = {
         index + 2: row for index, row in enumerate(source.rows)
