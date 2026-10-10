@@ -51,14 +51,7 @@ def max_source_rows_from_env() -> int:
 
 
 class FileProcessor:
-    """Application adapter connecting storage, pipeline and repositories.
-
-    Order per Plan §4.6 (D-21): claim → read → transform → artifact put →
-    persist (one application-DB transaction) → staging status update. The
-    status update happens only after persist returns because staging and
-    application are different databases; a crash between them is recovered
-    by stale reclaim + idempotent rerun.
-    """
+    """Application adapter connecting storage, pipeline and repositories."""
 
     def __init__(
         self,
