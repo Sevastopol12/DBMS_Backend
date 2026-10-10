@@ -129,7 +129,9 @@ def normalize_datetime(value: Any) -> datetime | None:
                 except ValueError:
                     return None
             if 1 <= number <= 60_000:
-                return datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(days=number)
+                return datetime(1899, 12, 30, tzinfo=VIETNAM_TZ) + timedelta(
+                    days=number
+                )
 
         text = normalize_text(value)
         if text is None:

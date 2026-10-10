@@ -3,20 +3,15 @@ from __future__ import annotations
 import hashlib
 import re
 from typing import Any
+from uuid import UUID
 
 import pandas as pd
 
 from backend.domain.processing.transformation.normalization import (
     normalize_identifier,
-    normalized_token,
 )
 
 _CCCD_RE = re.compile(r"^\d{12}$")
-
-
-def _normalize_identity_field(value: Any) -> str:
-    token = normalized_token(value) or ""
-    return re.sub(r"\s+", " ", token).strip()
 
 
 def _normalized_cccd(value: Any) -> str | None:
@@ -33,28 +28,24 @@ def _normalized_cccd(value: Any) -> str | None:
     return normalized.strip()
 
 
-def resolve_patient_key(
-    cccd: Any = None,
-    ho_ten: Any = None,
-    nam_sinh: Any = None,
-    dia_chi: Any = None,
-) -> str:
-    """Resolve identity from CCCD, or from the normalized fallback tuple.
+def resolve_patient_key(facility_id: UUID | str, cccd: Any) -> str:
+    """Resolve the facility-scoped patient identity (D-10).
 
-    A non-empty CCCD is an identity assertion: it must be a 12-digit value.
-    This deliberately raises for malformed assertions so the pipeline can
-    drop only that row and report an aggregate count.
+    ``patient_key = sha256("facility|{facility_id}|cccd|{cccd}")``. There is
+    no fallback identity: a missing or malformed CCCD raises ``ValueError``
+    so the pipeline can drop only that row and report an aggregate count.
     """
 
+    if facility_id is None or (
+        isinstance(facility_id, str) and not facility_id.strip()
+    ):
+        raise ValueError("missing facility_id")
     normalized_cccd = _normalized_cccd(cccd)
-    if normalized_cccd is not None:
-        if not _CCCD_RE.fullmatch(normalized_cccd):
-            raise ValueError("invalid CCCD")
-        return hashlib.sha256(f"cccd|{normalized_cccd}".encode()).hexdigest()
-
-    parts = [_normalize_identity_field(v) for v in (ho_ten, nam_sinh, dia_chi)]
-    joined = "fallback|" + "|".join(parts)
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+    if normalized_cccd is None or not _CCCD_RE.fullmatch(normalized_cccd):
+        raise ValueError("invalid CCCD")
+    return hashlib.sha256(
+        f"facility|{facility_id}|cccd|{normalized_cccd}".encode()
+    ).hexdigest()
 
 
 __all__ = ["resolve_patient_key"]

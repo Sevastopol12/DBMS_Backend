@@ -18,8 +18,10 @@ class MetricsCache:
     def get(self, key: str) -> object | None:
         try:
             value = self.client.get(key)
-            return None if value is None else json.loads(
-                value, parse_constant=_reject_nonstandard_constant
+            return (
+                None
+                if value is None
+                else json.loads(value, parse_constant=_reject_nonstandard_constant)
             )
         except Exception as exc:  # noqa: BLE001 - best-effort cache; never raise
             logger.warning(

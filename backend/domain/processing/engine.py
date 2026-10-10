@@ -7,16 +7,18 @@ from typing import Any
 from uuid import UUID
 
 from backend.database.canonical import (
-    ACCEPTANCE_FIELDS,
     CANONICAL_FIELD_NAMES,
     CANONICAL_FIELD_SET,
-    OPTIONAL_CLINICAL_FIELDS,
+    IDENTITY_FIELDS,
 )
 from backend.timezone import today_vietnam
 
 from .mapping import MappingCatalog, MappingSource, match_headers
+from .merge import FieldCandidate, RowCandidate, merge_candidates
 from .models import (
+    AcceptedRecord,
     ColumnMap,
+    DuplicateRole,
     FieldPlan,
     FieldQuality,
     FileAcceptancePolicy,
@@ -26,14 +28,14 @@ from .models import (
     ProcessingStage,
     QualityReport,
     ReportRow,
+    RowDecision,
     RowDisposition,
-    RowIssueRecord,
-    RuleMode,
     SourceDataset,
     TransformResult,
     safe_issue_sample,
 )
 from .reader import read_source_dataset
+from .reserved_columns import strip_reserved
 from .transformation import crossfield
 from .transformation.normalization import (
     normalize_date,
@@ -47,16 +49,9 @@ from .transformation.operations import execute_operation
 from .transformation.validation import ValidationResult, ValidationState, validate_field
 
 
-@dataclass(frozen=True)
-class _RowTransformResult:
-    accepted_row: ReportRow | None = None
-    review_record: RowIssueRecord | None = None
-
-
 @dataclass
 class _RowAccumulator:
     issue_codes: list[str] = field(default_factory=list)
-    flags: list[str] = field(default_factory=list)
 
     def add_issue(self, code: str | None) -> None:
         if (
@@ -66,13 +61,6 @@ class _RowAccumulator:
             and code not in self.issue_codes
         ):
             self.issue_codes.append(code)
-
-    def add_flag(self, code: str) -> None:
-        if code == "MISSING" or code.startswith("MISSING:"):
-            return
-        if code not in self.flags:
-            self.flags.append(code)
-        self.add_issue(code)
 
     def add_field_issue(self, code: str | None, field_name: str) -> None:
         if code and code != "MISSING" and not code.startswith("MISSING:"):
@@ -95,9 +83,7 @@ class TransformPipeline:
         self.policy = policy or FileAcceptancePolicy()
         self.operation_handlers = operation_handlers or {}
         self.reference_date = (
-            reference_date
-            or self.policy.validation.reference_date
-            or today_vietnam()
+            reference_date or self.policy.validation.reference_date or today_vietnam()
         )
 
     async def transform(
@@ -109,7 +95,8 @@ class TransformPipeline:
         return self.transform_dataset(dataset)
 
     def transform_dataset(self, dataset: SourceDataset) -> TransformResult:
-        plan = self.build_mapping_plan(dataset.headers, dataset.rows)
+        headers, clean_rows = strip_reserved(dataset.headers, dataset.rows)
+        plan = self.build_mapping_plan(headers, clean_rows)
 
         quality = QualityReport(
             file_id=dataset.source_file_id,
@@ -126,9 +113,8 @@ class TransformPipeline:
         mapping_reasons = self.policy.mapping_rejection_reasons(plan)
         if mapping_reasons:
             quality.accepted_rows = 0
-            quality.accepted_clean_rows = 0
-            quality.accepted_with_flags_rows = 0
             quality.rejected_rows = len(dataset.rows)
+            quality.ignored_duplicate_row_count = 0
             self._add_issues(quality, mapping_reasons)
             quality.decision = FileDecision.REJECTED
             quality.processing_stage = ProcessingStage.POLICY
@@ -138,149 +124,120 @@ class TransformPipeline:
                 file_id=dataset.source_file_id,
                 rejected_row_count=len(dataset.rows),
                 quality_report=quality,
+                source=dataset,
             )
 
-        accepted_rows: list[ReportRow] = []
-        accepted_numbers: list[int] = []
-        review_records = []
-        for index, source_row in enumerate(dataset.rows, start=2):
-            row_result = self._transform_row(index, source_row, plan, quality)
-            if row_result.accepted_row is not None:
-                accepted_rows.append(row_result.accepted_row)
-                accepted_numbers.append(index)
-            if row_result.review_record is not None:
-                review_records.append(row_result.review_record)
+        groups: dict[
+            tuple[Any, ...],
+            list[tuple[RowCandidate, dict[str, Any], dict[str, ValidationResult]]],
+        ] = {}
+        for index, source_row in enumerate(clean_rows, start=2):
+            values, results = self._validate_fields(index, source_row, plan, quality)
+            candidate = RowCandidate(
+                index,
+                {
+                    name: FieldCandidate(
+                        values.get(name), result.state, result.issue_code
+                    )
+                    for name, result in results.items()
+                },
+            )
+            valid_identity = all(
+                results[name].state is ValidationState.VALID for name in IDENTITY_FIELDS
+            )
+            key = (
+                tuple(values[name] for name in IDENTITY_FIELDS)
+                if valid_identity
+                else ("unkeyed", index)
+            )
+            groups.setdefault(key, []).append((candidate, values, results))
 
-        quality.processing_stage = ProcessingStage.VALIDATION
-        policy_reasons = self.policy.row_rejection_reasons(
-            quality,
-            accepted_rows=quality.accepted_rows,
-            total_rows=quality.total_rows,
-        )
-        if policy_reasons:
-            self._add_issues(quality, policy_reasons)
-            quality.decision = FileDecision.REJECTED
-            quality.processing_stage = ProcessingStage.POLICY
-            accepted_rows = []
-            accepted_numbers = []
-            quality.accepted_rows = 0
-            quality.accepted_clean_rows = 0
-            quality.accepted_with_flags_rows = 0
-            quality.rejected_rows = quality.total_rows
-        else:
-            quality.decision = FileDecision.ACCEPTED
-            quality.processing_stage = ProcessingStage.COMPLETED
+        accepted_records: list[AcceptedRecord] = []
+        decisions: list[RowDecision] = []
+        for members in groups.values():
+            candidates = [member[0] for member in members]
+            row_numbers = [candidate.row_number for candidate in candidates]
+            merged = merge_candidates(candidates)
+            values = dict(merged.values)
+            required_issues = [
+                f"REQUIRED_FIELD_{'MISSING' if merged.states.get(name) is ValidationState.MISSING else 'INVALID'}:{name}"
+                for name in self.policy.required_fields
+                if merged.states.get(name) is not ValidationState.VALID
+            ]
+            own_issues = {}
+            for candidate, _, results in members:
+                own_issues[candidate.row_number] = [
+                    f"{result.issue_code}:{name}"
+                    for name, result in results.items()
+                    if result.state is ValidationState.INVALID and result.issue_code
+                ]
+            cross_issues = self._apply_crossfield(
+                values, quality, row_numbers[0], _RowAccumulator()
+            )
+            group_issues = list(dict.fromkeys([*required_issues, *cross_issues]))
+            if not group_issues:
+                for name in CANONICAL_FIELD_NAMES:
+                    if merged.states.get(name) is not ValidationState.VALID:
+                        values[name] = None
+                try:
+                    row = ReportRow(**values)
+                    accepted_records.append(
+                        AcceptedRecord(
+                            row=row,
+                            primary_row_number=row_numbers[0],
+                            contributing_row_numbers=row_numbers,
+                        )
+                    )
+                    quality.accepted_rows += 1
+                    quality.ignored_duplicate_row_count += len(row_numbers) - 1
+                    for row_number in row_numbers[1:]:
+                        decisions.append(
+                            RowDecision(
+                                source_row_number=row_number,
+                                disposition=RowDisposition.ACCEPTED,
+                                duplicate_role=DuplicateRole.MERGED,
+                                merged_into_row=row_numbers[0],
+                                group_row_numbers=row_numbers,
+                            )
+                        )
+                except ValueError:
+                    group_issues = ["ROW_VALIDATION_FAILED"]
+            if group_issues:
+                for position, row_number in enumerate(row_numbers):
+                    codes = list(
+                        dict.fromkeys([*group_issues, *own_issues[row_number]])
+                    )
+                    decisions.append(
+                        RowDecision(
+                            source_row_number=row_number,
+                            disposition=RowDisposition.REJECTED,
+                            duplicate_role=DuplicateRole.PRIMARY
+                            if position == 0
+                            else DuplicateRole.MERGED,
+                            merged_into_row=None if position == 0 else row_numbers[0],
+                            group_row_numbers=row_numbers,
+                            issue_codes=codes,
+                        )
+                    )
+                    quality.rejected_rows += 1
+                    self._add_issues(quality, codes, row_number)
+
+        quality.processing_stage = ProcessingStage.COMPLETED
+        quality.decision = FileDecision.ACCEPTED
 
         if not quality.counts_balanced:
             raise RuntimeError("Quality counters are not balanced")
 
         return TransformResult(
             file_id=dataset.source_file_id,
-            accepted_rows=accepted_rows,
-            accepted_row_numbers=accepted_numbers,
-            accepted_row_count=len(accepted_rows),
+            accepted_records=accepted_records,
+            decisions=decisions,
+            accepted_row_count=len(accepted_records),
             rejected_row_count=quality.rejected_rows,
+            ignored_duplicate_row_count=quality.ignored_duplicate_row_count,
             quality_report=quality,
-            review_records=review_records,
+            source=dataset,
         )
-
-    def _transform_row(
-        self,
-        index: int,
-        source_row: dict[str, Any],
-        plan: MappingPlan,
-        quality: QualityReport,
-    ) -> _RowTransformResult:
-        acc = _RowAccumulator()
-        values, validation_results = self._validate_fields(
-            index,
-            source_row,
-            plan,
-            quality,
-            acc,
-        )
-
-        for field_name in OPTIONAL_CLINICAL_FIELDS:
-            result = validation_results.get(field_name)
-            if (
-                result is not None
-                and result.state not in {
-                    ValidationState.MISSING,
-                    ValidationState.VALID,
-                }
-            ):
-                values[field_name] = None
-                flag = f"FIELD_DROPPED:{field_name}"
-                acc.add_flag(flag)
-                self._add_issues(quality, [f"FLAG:{flag}"], index)
-
-        crossfield_rejection_issues = self._apply_crossfield(
-            values,
-            quality,
-            index,
-            acc,
-        )
-
-        acceptance_issues = self._acceptance_issues(values, validation_results)
-        for issue in acceptance_issues:
-            acc.add_issue(issue)
-
-        row_rejection_issues = [*acceptance_issues, *crossfield_rejection_issues]
-        if row_rejection_issues:
-            quality.rejected_rows += 1
-            self._add_issues(quality, row_rejection_issues, index)
-            if acc.flags:
-                quality.flagged_rows += 1
-            return _RowTransformResult(
-                review_record=RowIssueRecord(
-                    source_row_number=index,
-                    disposition=RowDisposition.REJECTED,
-                    issue_codes=acc.issue_codes,
-                )
-            )
-
-        try:
-            # ReportRow keeps its canonical typed schema.  A malformed
-            # visit date remains a validation diagnostic, but is not a
-            # production acceptance criterion and cannot make the row
-            # fail model construction.
-            report_values = dict(values)
-            if validation_results.get("ngay_kham") and (
-                validation_results["ngay_kham"].state is ValidationState.INVALID
-            ):
-                report_values["ngay_kham"] = None
-            accepted_row = ReportRow(**report_values)
-            quality.accepted_rows += 1
-            if acc.flags:
-                quality.accepted_with_flags_rows += 1
-            else:
-                quality.accepted_clean_rows += 1
-            if acc.flags:
-                quality.flagged_rows += 1
-                review_record = RowIssueRecord(
-                    source_row_number=index,
-                    disposition=RowDisposition.ACCEPTED_WITH_FLAGS,
-                    issue_codes=acc.flags,
-                )
-            else:
-                review_record = None
-            return _RowTransformResult(
-                accepted_row=accepted_row,
-                review_record=review_record,
-            )
-        except ValueError:
-            quality.rejected_rows += 1
-            acc.add_issue("ROW_VALIDATION_FAILED")
-            self._add_issues(quality, ["ROW_VALIDATION_FAILED"], index)
-            if acc.flags:
-                quality.flagged_rows += 1
-            return _RowTransformResult(
-                review_record=RowIssueRecord(
-                    source_row_number=index,
-                    disposition=RowDisposition.REJECTED,
-                    issue_codes=acc.issue_codes,
-                )
-            )
 
     def _validate_fields(
         self,
@@ -288,7 +245,6 @@ class TransformPipeline:
         source_row: dict[str, Any],
         plan: MappingPlan,
         quality: QualityReport,
-        acc: _RowAccumulator,
     ) -> tuple[dict[str, Any], dict[str, ValidationResult]]:
         values: dict[str, Any] = {}
         validation_results: dict[str, ValidationResult] = {}
@@ -305,9 +261,6 @@ class TransformPipeline:
                 validation_results[can_field] = result
                 quality.field_quality[can_field].missing += 1
                 values[can_field] = None
-                acc.add_field_issue(result.issue_code, can_field)
-                for flag in result.flags:
-                    acc.add_flag(flag)
                 continue
             try:
                 raw_value = self._execute_field_plan(plan_for_field, source_row)
@@ -322,21 +275,11 @@ class TransformPipeline:
                 if result.normalized_value is not None:
                     value = result.normalized_value
                 values[can_field] = value
-                acc.add_field_issue(result.issue_code, can_field)
-                for flag in result.flags:
-                    acc.add_flag(flag)
-                    self._add_issues(quality, [f"FLAG:{flag}"], index)
                 stats = quality.field_quality[can_field]
                 if result.state is ValidationState.VALID:
                     stats.valid += 1
                 elif result.state is ValidationState.MISSING:
                     stats.missing += 1
-                elif result.state is ValidationState.SUSPICIOUS:
-                    stats.suspicious += 1
-                    if result.issue_code:
-                        self._add_issues(
-                            quality, [f"{result.issue_code}:{can_field}"], index
-                        )
                 else:
                     stats.invalid += 1
                     self._add_issues(
@@ -347,40 +290,12 @@ class TransformPipeline:
             except (TypeError, ValueError, KeyError):
                 quality.field_quality[can_field].invalid += 1
                 values[can_field] = None
-                acc.add_issue(f"INVALID_VALUE:{can_field}")
+                validation_results[can_field] = ValidationResult(
+                    state=ValidationState.INVALID, issue_code="INVALID_VALUE"
+                )
                 self._add_issues(quality, [f"INVALID_VALUE:{can_field}"], index)
 
         return values, validation_results
-
-    @staticmethod
-    def _is_populated(value: Any) -> bool:
-        return value is not None and not (isinstance(value, str) and not value.strip())
-
-    def _acceptance_issues(
-        self,
-        values: dict[str, Any],
-        validation_results: dict[str, ValidationResult],
-    ) -> list[str]:
-        missing_acceptance = [
-            field
-            for field in ACCEPTANCE_FIELDS
-            if not self._is_populated(values.get(field))
-        ]
-        acceptance_issues = [
-            f"REQUIRED_FIELD_MISSING:{field}" for field in missing_acceptance
-        ]
-        invalid_acceptance = [
-            field
-            for field in ACCEPTANCE_FIELDS
-            if field not in missing_acceptance
-            and field in validation_results
-            and validation_results[field].state is not ValidationState.VALID
-        ]
-        acceptance_issues.extend(
-            f"REQUIRED_FIELD_{validation_results[field].state.value}:{field}"
-            for field in invalid_acceptance
-        )
-        return acceptance_issues
 
     def _apply_crossfield(
         self,
@@ -391,20 +306,14 @@ class TransformPipeline:
     ) -> list[str]:
         crossfield_rejection_issues: list[str] = []
         for issue in crossfield.check_row(values, reference_date=self.reference_date):
-            mode = (
-                self.policy.validation.cccd_structure
-                if issue.code.startswith("CCCD_")
-                else self.policy.validation.cross_field
-            )
-            if mode is RuleMode.OFF:
-                continue
-            if mode is RuleMode.FLAG or issue.severity != "INVALID":
-                acc.add_flag(issue.code)
-                self._add_issues(quality, [f"FLAG:{issue.code}"], index)
-            else:
+            if issue.code == "VISIT_BEFORE_BIRTH" and issue.severity == "INVALID":
                 issue_code = f"XFIELD:{issue.code}"
                 acc.add_issue(issue_code)
                 crossfield_rejection_issues.append(issue_code)
+            else:
+                # Informational findings never reject and never appear in
+                # row decisions; they are only counted in the quality report.
+                self._add_issues(quality, [f"INFO:{issue.code}"], index)
         return crossfield_rejection_issues
 
     def build_mapping_plan(
@@ -499,8 +408,11 @@ class TransformPipeline:
                 return None
             normalized = normalize_datetime(value)
             # Keep an unparseable value for semantic validation so the
-            # detailed INVALID_VISIT_DATE issue code is preserved.
-            return normalized if normalized is not None else value
+            # detailed INVALID_VISIT_DATE issue code is preserved. Truncate
+            # to whole seconds per D-01; naive input is Vietnam local time.
+            if normalized is None:
+                return value
+            return normalized.replace(microsecond=0)
         if field == "nam_sinh":
             text = normalize_text(value)
             if text is None or text.isdigit() and len(text) == 4:

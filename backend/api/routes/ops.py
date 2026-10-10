@@ -6,9 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from backend.api.dependencies import (
+    AcceptedDataRepositoryDep,
     IngestionRepositoryDep,
     MetricsRepositoryDep,
-    ReportRepositoryDep,
     WorkflowRunRepositoryDep,
     get_resources,
 )
@@ -34,7 +34,7 @@ def get_ops_service(
     request: Request,
     ingestion: IngestionRepositoryDep,
     workflow: WorkflowRunRepositoryDep,
-    reports: ReportRepositoryDep,
+    reports: AcceptedDataRepositoryDep,
     metrics: MetricsRepositoryDep,
 ) -> OpsService:
     return OpsService(

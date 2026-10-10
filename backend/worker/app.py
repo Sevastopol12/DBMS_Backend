@@ -62,5 +62,6 @@ def _close_worker_on_shutdown(sender=None, **kwargs):
     close_worker_storage()
     close_worker_redis()
 
+
 if __name__ == "__main__":
     celery.start()

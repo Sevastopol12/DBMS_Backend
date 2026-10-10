@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 REQUIRED_STARTUP_TABLES: tuple[str, ...] = (
     "Files.ingestion_files",
     "Files.workflow_run_log",
-    "Diabetes.report",
+    "Diabetes.Demographic",
+    "Diabetes.Measurement",
     "Diabetes.report_review",
     "Metrics.computation_run_log",
 )

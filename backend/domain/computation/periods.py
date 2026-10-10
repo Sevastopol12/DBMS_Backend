@@ -37,6 +37,7 @@ def to_local_naive(value: Any) -> Any:
         if isinstance(parsed.dtype, pd.DatetimeTZDtype):
             return parsed.dt.tz_convert(VIETNAM_TZ).dt.tz_localize(None)
         if parsed.dtype == object:
+
             def _one(item: Any) -> Any:
                 if item is None or pd.isna(item):
                     return pd.NaT

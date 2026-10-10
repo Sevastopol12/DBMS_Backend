@@ -95,7 +95,9 @@ def _ordered(frame: pd.DataFrame) -> pd.DataFrame:
     result["_row_order"] = range(len(result))
     date_key = "ngay_kham" if "ngay_kham" in result else "_row_order"
     id_key = "id" if "id" in result else "_row_order"
-    return result.sort_values([date_key, id_key, "_row_order"], kind="stable", na_position="first")
+    return result.sort_values(
+        [date_key, id_key, "_row_order"], kind="stable", na_position="first"
+    )
 
 
 def _latest_valid_pair(frame: pd.DataFrame) -> pd.DataFrame:
@@ -138,7 +140,11 @@ def _present(frame: pd.DataFrame, field: str) -> pd.Series:
     if field not in frame:
         return pd.Series(False, index=frame.index, dtype=bool)
     values = frame[field]
-    return values.notna() & values.astype(str).str.strip().ne("") & values.astype(str).ne("nan")
+    return (
+        values.notna()
+        & values.astype(str).str.strip().ne("")
+        & values.astype(str).ne("nan")
+    )
 
 
 def compute_glycemic_metrics(frame: pd.DataFrame) -> dict[str, float | None]:
@@ -154,22 +160,30 @@ def compute_glycemic_metrics(frame: pd.DataFrame) -> dict[str, float | None]:
         if not valid_hba1c.empty
         else valid_hba1c
     )
-    glucose = frame["_glucose"].dropna() if "_glucose" in frame else pd.Series(dtype=float)
+    glucose = (
+        frame["_glucose"].dropna() if "_glucose" in frame else pd.Series(dtype=float)
+    )
     return {
         "glycemic_control_rate": (
-            float((hba1c_reps["_hba1c"] < 7).mean())
-            if not hba1c_reps.empty
-            else None
+            float((hba1c_reps["_hba1c"] < 7).mean()) if not hba1c_reps.empty else None
         ),
         "avg_glucose": float(glucose.mean()) if not glucose.empty else None,
         "median_glucose": float(glucose.median()) if not glucose.empty else None,
-        "avg_hba1c": float(hba1c_reps["_hba1c"].mean()) if not hba1c_reps.empty else None,
-        "median_hba1c": float(hba1c_reps["_hba1c"].median()) if not hba1c_reps.empty else None,
+        "avg_hba1c": float(hba1c_reps["_hba1c"].mean())
+        if not hba1c_reps.empty
+        else None,
+        "median_hba1c": float(hba1c_reps["_hba1c"].median())
+        if not hba1c_reps.empty
+        else None,
     }
 
 
 def compute_clinical_control(frame: pd.DataFrame) -> dict[str, float | int | None]:
-    work = frame if {"_systolic", "_diastolic", "_hba1c", "_glucose"}.issubset(frame) else parse_measurements(frame)
+    work = (
+        frame
+        if {"_systolic", "_diastolic", "_hba1c", "_glucose"}.issubset(frame)
+        else parse_measurements(frame)
+    )
     return {**compute_bp_metrics(work), **compute_glycemic_metrics(work)}
 
 

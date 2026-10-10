@@ -13,7 +13,11 @@ def _present_series(frame: pd.DataFrame, field: str) -> pd.Series:
     if field not in frame:
         return pd.Series(False, index=frame.index, dtype=bool)
     values = frame[field]
-    return values.notna() & values.astype(str).str.strip().ne("") & values.astype(str).ne("nan")
+    return (
+        values.notna()
+        & values.astype(str).str.strip().ne("")
+        & values.astype(str).ne("nan")
+    )
 
 
 def _patient_series(frame: pd.DataFrame) -> pd.Series:
@@ -28,14 +32,18 @@ def compute_disease_burden(frame: pd.DataFrame) -> dict[str, float | None]:
 
     if frame.empty:
         return {"pct_tha": None, "pct_dtd": None, "pct_comorbid": None}
-    grouped = pd.DataFrame(
-        {
-            "patient_key": _patient_series(frame),
-            "tha": _present_series(frame, "icd_tha").to_numpy(),
-            "dtd": _present_series(frame, "icd_dtd").to_numpy(),
-        },
-        index=frame.index,
-    ).groupby("patient_key", sort=False)[["tha", "dtd"]].any()
+    grouped = (
+        pd.DataFrame(
+            {
+                "patient_key": _patient_series(frame),
+                "tha": _present_series(frame, "icd_tha").to_numpy(),
+                "dtd": _present_series(frame, "icd_dtd").to_numpy(),
+            },
+            index=frame.index,
+        )
+        .groupby("patient_key", sort=False)[["tha", "dtd"]]
+        .any()
+    )
     total = len(grouped)
     if not total:
         return {"pct_tha": None, "pct_dtd": None, "pct_comorbid": None}
@@ -59,7 +67,9 @@ def _diagnosis_tokens(value: object) -> list[str]:
     normalized = normalized_token(value) or ""
     return [
         token
-        for token in (re.sub(r"\s+", " ", raw).strip() for raw in re.split(r"[,;/]", normalized))
+        for token in (
+            re.sub(r"\s+", " ", raw).strip() for raw in re.split(r"[,;/]", normalized)
+        )
         if token
     ]
 
@@ -70,7 +80,11 @@ def compute_comorbidity_breakdown(frame: pd.DataFrame) -> list[dict[str, object]
     if frame.empty:
         return []
     keys = _patient_series(frame).tolist()
-    values = frame["chan_doan_di_kem"].tolist() if "chan_doan_di_kem" in frame else [None] * len(frame)
+    values = (
+        frame["chan_doan_di_kem"].tolist()
+        if "chan_doan_di_kem" in frame
+        else [None] * len(frame)
+    )
     patients_by_label: dict[str, set[str]] = {}
     for key, value in zip(keys, values, strict=False):
         for label in set(_diagnosis_tokens(value)):

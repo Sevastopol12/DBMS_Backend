@@ -3,9 +3,8 @@ from pathlib import PurePath
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
-from backend.database.service.metrics.scope import MetricsScope
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
 from backend.timezone import VIETNAM_TZ, VIETNAM_TZ_NAME
@@ -38,7 +37,7 @@ class IssueCodeCount(BaseModel):
 
 
 class PeriodSummaryMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
@@ -65,7 +64,7 @@ class PeriodSummaryMetric(BaseModel):
 
 
 class ComorbidityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     diagnosis_label: str
@@ -75,7 +74,7 @@ class ComorbidityMetric(BaseModel):
 
 class PatientStateMetric(BaseModel):
     patient_key: str
-    facility_id: UUID | None
+    facility_id: UUID
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -95,16 +94,16 @@ class PatientStateMetric(BaseModel):
 
 
 class DataQualityMetric(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
     period_start: ApiDateTime
     period_end: ApiDateTime
     files_processed: int
     avg_mapping_coverage_ratio: float | None = Field(default=None, allow_inf_nan=False)
     total_rows_seen: int
-    accepted_clean_rows: int
-    accepted_with_flags_rows: int
+    accepted_rows: int
     rejected_rows: int
+    ignored_duplicate_row_count: int
     top_issue_codes: list[IssueCodeCount]
     computed_at: ApiDateTime
 
@@ -114,18 +113,27 @@ class MetricsStatus(BaseModel):
 
 
 class IngestionCreate(BaseModel):
-    facility_id: UUID
+    model_config = ConfigDict(extra="forbid")
+
     filename: str
-    content: str | None = None
     content_type: str
 
 
 class IngestionComplete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: UUID
-    facility_id: UUID
     content_hash: str
     size_bytes: int | None = None
     mappings: dict[str, Any] | None = None
+
+
+class UploadReportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parent_file_id: UUID
+    filename: str
+    content_type: str
 
 
 class IngestionResponse(BaseModel):
@@ -141,35 +149,48 @@ class IngestionResponse(BaseModel):
     error_message: str | None = None
     accepted_row_count: int = 0
     rejected_row_count: int = 0
+    ignored_duplicate_row_count: int = 0
+
+    parent_file_id: UUID | None = None
+    rejection_report_available: bool = False
+    rejection_report_expires_at: ApiDateTime | None = None
 
     created_at: ApiDateTime
 
 
+class FileDetailResponse(BaseModel):
+    id: UUID
+    facility_id: UUID
+    filename: str | None = None
+    object_key: str | None = None
+    status: FileStatus
+    error_code: str | None = None
+    error_message: str | None = None
+    accepted_row_count: int = 0
+    rejected_row_count: int = 0
+    ignored_duplicate_row_count: int = 0
+    parent_file_id: UUID | None = None
+    rejection_report_available: bool = False
+    rejection_report_expires_at: ApiDateTime | None = None
+    created_at: ApiDateTime | None = None
+    uploaded_at: ApiDateTime | None = None
+    completed_at: ApiDateTime | None = None
+
+
+class RejectionDownloadResponse(BaseModel):
+    url: str
+    expires_in_seconds: int
+    filename: str
+
+
 class MetricsGrainQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     grain: Literal["3D", "2W", "3M", "6M", "TODAY", "ALL"]
-    facility_id: UUID | Literal["ALL"] | None = None
 
 
 class MetricsFacilityQuery(BaseModel):
-    facility_id: UUID | None = None
-
-
-def to_metrics_scope(
-    facility_id: UUID | Literal["ALL"] | None,
-    *,
-    allow_rollup: bool = True,
-) -> MetricsScope:
-    """Convert the wire-level facility selector to the repository scope."""
-
-    if facility_id is None:
-        return MetricsScope.all_facilities()
-    if facility_id == "ALL":
-        if not allow_rollup:
-            raise ValueError("rollup scope is invalid for patient state")
-        return MetricsScope.rollup()
-    if isinstance(facility_id, str):
-        raise ValueError("facility_id must be ALL or a UUID")  # noqa: TRY004 - validation failure contract is ValueError
-    return MetricsScope.facility(facility_id)
+    model_config = ConfigDict(extra="forbid")
 
 
 def _get_safe_filename(filename: str) -> str:
@@ -185,6 +206,8 @@ def _get_safe_filename(filename: str) -> str:
 def _serialize_ingestion(
     file: FileInfo, presigned_url: str | None = None
 ) -> IngestionResponse:
+    artifact_key = getattr(file, "rejection_artifact_key", None)
+    artifact_expires = getattr(file, "rejection_artifact_expires_at", None)
     return IngestionResponse(
         id=file.id,
         facility_id=file.facility_id,
@@ -192,11 +215,40 @@ def _serialize_ingestion(
         object_key=file.object_key,
         status=file.status,
         presigned_url=presigned_url,
-        accepted_row_count=file.accepted_row_count,
-        rejected_row_count=file.rejected_row_count,
+        accepted_row_count=file.accepted_row_count or 0,
+        rejected_row_count=file.rejected_row_count or 0,
+        ignored_duplicate_row_count=getattr(file, "ignored_duplicate_row_count", 0)
+        or 0,
+        parent_file_id=getattr(file, "parent_file_id", None),
+        rejection_report_available=artifact_key is not None,
+        rejection_report_expires_at=artifact_expires,
         error_code=file.error_code,
         error_message=file.error_message,
         created_at=file.created_at,
+    )
+
+
+def _serialize_file_detail(file: FileInfo) -> FileDetailResponse:
+    artifact_key = getattr(file, "rejection_artifact_key", None)
+    artifact_expires = getattr(file, "rejection_artifact_expires_at", None)
+    return FileDetailResponse(
+        id=file.id,
+        facility_id=file.facility_id,
+        filename=file.filename,
+        object_key=file.object_key,
+        status=file.status,
+        error_code=file.error_code,
+        error_message=file.error_message,
+        accepted_row_count=file.accepted_row_count or 0,
+        rejected_row_count=file.rejected_row_count or 0,
+        ignored_duplicate_row_count=getattr(file, "ignored_duplicate_row_count", 0)
+        or 0,
+        parent_file_id=getattr(file, "parent_file_id", None),
+        rejection_report_available=artifact_key is not None,
+        rejection_report_expires_at=artifact_expires,
+        created_at=file.created_at,
+        uploaded_at=getattr(file, "uploaded_at", None),
+        completed_at=getattr(file, "completed_at", None),
     )
 
 
@@ -205,6 +257,7 @@ __all__ = [
     "ApiDateTime",
     "ComorbidityMetric",
     "DataQualityMetric",
+    "FileDetailResponse",
     "IngestionComplete",
     "IngestionCreate",
     "IngestionResponse",
@@ -214,7 +267,9 @@ __all__ = [
     "MetricsStatus",
     "PatientStateMetric",
     "PeriodSummaryMetric",
+    "RejectionDownloadResponse",
+    "UploadReportCreate",
     "_get_safe_filename",
+    "_serialize_file_detail",
     "_serialize_ingestion",
-    "to_metrics_scope",
 ]
