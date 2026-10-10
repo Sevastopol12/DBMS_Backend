@@ -178,8 +178,10 @@ class FileProcessor:
 
             try:
                 persistence = await self._persistence.persist(request)
-            except Exception as exec:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
-                print(exec)
+            except Exception as persist_exc:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
+                logger.error(
+                    "file_id=%s persist_exception=%s", file_id, type(persist_exc).__name__
+                )
                 await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
                 return
 
