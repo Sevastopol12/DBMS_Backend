@@ -122,6 +122,7 @@ class TransformPipeline:
                 raise RuntimeError("Quality counters are not balanced")
             return TransformResult(
                 file_id=dataset.source_file_id,
+                filename=dataset.filename,
                 rejected_row_count=len(dataset.rows),
                 quality_report=quality,
                 source=dataset,
@@ -230,6 +231,7 @@ class TransformPipeline:
 
         return TransformResult(
             file_id=dataset.source_file_id,
+            filename=dataset.filename,
             accepted_records=accepted_records,
             decisions=decisions,
             accepted_row_count=len(accepted_records),

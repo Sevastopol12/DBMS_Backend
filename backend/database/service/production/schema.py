@@ -141,6 +141,7 @@ class ReviewRecord(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source_file_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    source_filename: Mapped[str] = mapped_column(Text, nullable=False)
     source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
     disposition: Mapped[str] = mapped_column(Text, nullable=False)
     duplicate_role: Mapped[str] = mapped_column(

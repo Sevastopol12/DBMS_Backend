@@ -51,6 +51,7 @@ class PersistReview:
 class PersistRequest:
     source_file_id: UUID
     facility_id: UUID
+    source_filename: str
     source_file_uploaded_at: datetime
     transformed_at: datetime
     records: Sequence[PersistRecord]
@@ -365,6 +366,7 @@ class AcceptedDataPersistence:
         rows = [
             {
                 "source_file_id": req.source_file_id,
+                "source_filename": req.source_filename,
                 "source_row_number": review.source_row_number,
                 "disposition": review.disposition,
                 "duplicate_role": review.duplicate_role,

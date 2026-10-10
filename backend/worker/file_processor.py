@@ -180,7 +180,9 @@ class FileProcessor:
                 persistence = await self._persistence.persist(request)
             except Exception as persist_exc:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
                 logger.error(
-                    "file_id=%s persist_exception=%s", file_id, type(persist_exc).__name__
+                    "file_id=%s persist_exception=%s",
+                    file_id,
+                    type(persist_exc).__name__,
                 )
                 await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
                 return
@@ -261,6 +263,7 @@ class FileProcessor:
         return PersistRequest(
             source_file_id=result.file_id,
             facility_id=facility_id,
+            source_filename=result.filename,
             source_file_uploaded_at=source_file_uploaded_at,
             transformed_at=transformed_at,
             records=records,

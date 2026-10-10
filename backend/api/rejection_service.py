@@ -13,7 +13,10 @@ from backend.api.dto import (
     RejectedArtifactItem,
     RejectedArtifactListResponse,
 )
-from backend.database.service.storage import presigned_get_ttl_from_env
+from backend.database.service.storage import (
+    presigned_get_ttl_from_env,
+    rejection_key_for_file,
+)
 from backend.timezone import ensure_vietnam_aware, now_vietnam
 
 logger = logging.getLogger(__name__)
@@ -98,9 +101,36 @@ def decode_cursor(cursor: str | None) -> tuple[datetime, str] | None:
         raise InvalidCursorError("invalid cursor") from exc
 
 
+def _source_filename(record: Any) -> str:
+    for attr in ("source_filename", "filename"):
+        value = getattr(record, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _display_filename(source_filename: str | None, file_id: UUID) -> str:
+    """Download name built from the original upload's name.
+    ``{original_stem}_rejected.xlsx``; falls back to
+    ``rejected_{file_id}.xlsx`` only when the source name is missing.
+    """
+
+    if source_filename:
+        from pathlib import PurePath
+
+        base = PurePath(source_filename).name.strip()
+        if base and base not in {".", ".."}:
+            stem = base.rsplit(".", 1)[0].strip() if "." in base else base
+            if stem:
+                return f"{stem}_rejected.xlsx"
+    return f"rejected_{file_id}.xlsx"
+
+
 def _item(record: Any, now: datetime) -> RejectedArtifactItem:
+    filename = _display_filename(_source_filename(record), record.file_id)
     return RejectedArtifactItem(
         file_id=record.file_id,
+        filename=filename,
         parent_file_id=record.parent_file_id,
         file_status=str(record.file_status),
         state=artifact_state(record, now),
@@ -108,10 +138,6 @@ def _item(record: Any, now: datetime) -> RejectedArtifactItem:
         artifact_expires_at=record.artifact_expires_at,
         rejected_row_count=record.rejected_row_count,
     )
-
-
-def _filename(file_id: UUID) -> str:
-    return f"rejected_{file_id}.xlsx"
 
 
 class RejectionService:
@@ -123,7 +149,7 @@ class RejectionService:
 
     @staticmethod
     def _expected_key(facility_id: UUID, file_id: UUID) -> str:
-        return f"REJECTED_FILES/{facility_id}/{file_id}.xlsx"
+        return rejection_key_for_file(facility_id, file_id)
 
     async def _record(self, facility_id: UUID, file_id: UUID) -> Any:
         try:
@@ -195,9 +221,8 @@ class RejectionService:
             if not await asyncio.to_thread(self._storage.exists, key):
                 raise RejectionExpiredError()
             ttl = presigned_get_ttl_from_env()
-            url = await asyncio.to_thread(
-                self._storage.presign_get, key, ttl, _filename(file_id)
-            )
+            filename = _display_filename(_source_filename(record), file_id)
+            url = await asyncio.to_thread(self._storage.presign_get, key, ttl, filename)
         except RejectionExpiredError:
             raise
         except Exception as exc:
@@ -206,7 +231,7 @@ class RejectionService:
         return RejectedArtifactDownload(
             file_id=file_id,
             download_url=url,
-            artifact_filename=_filename(file_id),
+            artifact_filename=filename,
             url_expires_at=now + timedelta(seconds=ttl),
         )
 
