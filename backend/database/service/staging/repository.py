@@ -175,10 +175,7 @@ class IngestionRepository:
         *,
         processing_timeout: timedelta = timedelta(minutes=15),
     ) -> tuple[str, dict | None] | None:
-        """Atomically claim queued work or reclaim stale PROCESSING work.
-
-        Also increments attempt_count (CONTRACTS §4 / plan.md D4).
-        """
+        """Atomically claim queued work or reclaim stale PROCESSING work."""
         now = now_vietnam()
         stale_before = now - processing_timeout
         async with self._session.begin() as session:

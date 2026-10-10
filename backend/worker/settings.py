@@ -46,7 +46,7 @@ class SweepSettings:
 
 @dataclass(frozen=True)
 class ArtifactSettings:
-    """Rejection artifact lifecycle knobs (Plan §4.11; WP-06 owns this file)."""
+    """Rejection artifact lifecycle knobs."""
 
     prefix: str = "REJECTED_FILES"
     retention_days: int = 4
