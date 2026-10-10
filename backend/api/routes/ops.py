@@ -5,14 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from backend.api.dependencies import (
-    AcceptedDataRepositoryDep,
-    IngestionRepositoryDep,
-    MetricsRepositoryDep,
-    WorkflowRunRepositoryDep,
-    get_resources,
-)
-from backend.api.ops_dto import (
+from backend.api.data_objects.ops import (
     ComputeRequest,
     ComputeResponse,
     FileDetailResponse,
@@ -24,7 +17,14 @@ from backend.api.ops_dto import (
     TransformRequest,
     TransformResponse,
 )
-from backend.api.ops_service import OpsService
+from backend.api.dependencies import (
+    AcceptedDataRepositoryDep,
+    IngestionRepositoryDep,
+    MetricsRepositoryDep,
+    WorkflowRunRepositoryDep,
+    get_resources,
+)
+from backend.api.services.ops import OpsService
 from backend.database.errors import MetricsStoreUnavailable
 
 router = APIRouter()

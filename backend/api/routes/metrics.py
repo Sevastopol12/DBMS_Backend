@@ -5,8 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
-from backend.api.dependencies import get_metrics_service
-from backend.api.dto import (
+from backend.api.data_objects.metrics import (
     ComorbidityMetric,
     DataQualityMetric,
     MetricsFacilityQuery,
@@ -15,7 +14,8 @@ from backend.api.dto import (
     PatientStateMetric,
     PeriodSummaryMetric,
 )
-from backend.api.metrics_service import MetricsService
+from backend.api.dependencies import get_metrics_service
+from backend.api.services.metrics import MetricsService
 from backend.database.errors import MetricsDataIntegrityError, MetricsStoreUnavailable
 from backend.database.service.metrics.scope import MetricsScope
 

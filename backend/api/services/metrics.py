@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import TypeAdapter, ValidationError
 
-from backend.api.dto import (
+from backend.api.data_objects.metrics import (
     ComorbidityMetric,
     DataQualityMetric,
     MetricsStatus,

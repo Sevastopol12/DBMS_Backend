@@ -7,20 +7,22 @@ from fastapi.responses import RedirectResponse
 
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
+from backend.api.data_objects.ingestion import (
+    FileDetailResponse,
+    _serialize_file_detail,
+)
+from backend.api.data_objects.rejections import (
+    RejectedArtifactDownload,
+    RejectedArtifactItem,
+    RejectedArtifactListResponse,
+    RejectionDownloadResponse,
+)
 from backend.api.dependencies import (
     get_ingestion_repository,
     get_mapping_cache,
     get_rejection_service,
 )
-from backend.api.dto import (
-    FileDetailResponse,
-    RejectedArtifactDownload,
-    RejectedArtifactItem,
-    RejectedArtifactListResponse,
-    RejectionDownloadResponse,
-    _serialize_file_detail,
-)
-from backend.api.rejection_service import (
+from backend.api.services.rejection import (
     InvalidCursorError,
     RejectionExpiredError,
     RejectionNotFoundError,
