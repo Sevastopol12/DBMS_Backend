@@ -77,9 +77,7 @@ class IngestionRepository:
 
             return result.scalar_one_or_none()
 
-    # ------------------------------------------------------------------
     # Upload lifecycle
-    # ------------------------------------------------------------------
 
     async def complete_upload(
         self,
@@ -345,9 +343,9 @@ class IngestionRepository:
             )
             return list(result.scalars().all())
 
-    # ------------------------------------------------------------------
+    #
     # Read side (ops dashboard)
-    # ------------------------------------------------------------------
+    #
 
     async def status_counts(self, *, facility_id: UUID | None = None) -> dict[str, int]:
         stmt = select(FileInfo.status, func.count().label("n")).group_by(
@@ -445,6 +443,89 @@ class IngestionRepository:
             d = _file_to_dict(row)
             d["quality_report"] = row.quality_report
             return d
+
+    #
+    # Rejection artifact + facility-scoped lineage (WP-06, migration 011)
+    #
+
+    async def set_artifact(
+        self, file_id: UUID, key: str, expires_at: datetime
+    ) -> FileInfo | None:
+        """Record the rejection artifact object key and its expiry."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id)
+                .values(
+                    rejection_artifact_key=key,
+                    rejection_artifact_expires_at=expires_at,
+                )
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def clear_artifact(self, file_id: UUID) -> FileInfo | None:
+        """Forget the rejection artifact columns after the object is deleted."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id)
+                .values(
+                    rejection_artifact_key=None,
+                    rejection_artifact_expires_at=None,
+                )
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_for_facility(
+        self, file_id: UUID, facility_id: UUID
+    ) -> FileInfo | None:
+        """Fetch one file only when it belongs to ``facility_id`` (SQL-filtered)."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                select(FileInfo).where(
+                    FileInfo.id == file_id,
+                    FileInfo.facility_id == facility_id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def list_for_facility(
+        self,
+        facility_id: UUID,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[FileInfo]:
+        """List files of one facility, newest first (SQL-filtered)."""
+        stmt = (
+            select(FileInfo)
+            .where(FileInfo.facility_id == facility_id)
+            .order_by(FileInfo.created_at.desc())
+        )
+        if status is not None:
+            stmt = stmt.where(FileInfo.status == status)
+        stmt = stmt.limit(limit).offset(offset)
+        async with self._session.begin() as session:
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def list_expired_artifacts(
+        self, now: datetime, limit: int = 1_000
+    ) -> list[FileInfo]:
+        """Files whose artifact key is set and whose expiry is at or past ``now``."""
+        async with self._session.begin() as session:
+            result = await session.execute(
+                select(FileInfo)
+                .where(
+                    FileInfo.rejection_artifact_key.is_not(None),
+                    FileInfo.rejection_artifact_expires_at <= now,
+                )
+                .order_by(FileInfo.rejection_artifact_expires_at.asc())
+                .limit(limit)
+            )
+            return list(result.scalars().all())
 
 
 def _file_to_dict(row: FileInfo) -> dict:

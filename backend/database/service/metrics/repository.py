@@ -87,9 +87,7 @@ class MetricsRepository:
 
     # Run lifecycle (writes)
 
-    async def reap_stale_runs(
-        self, *, max_age: timedelta = timedelta(hours=1)
-    ) -> int:
+    async def reap_stale_runs(self, *, max_age: timedelta = timedelta(hours=1)) -> int:
         statement = (
             update(ComputationRunLog)
             .where(
@@ -232,9 +230,7 @@ class MetricsRepository:
                 return 0
 
             for model, _ in _METRIC_TABLES:
-                await session.execute(
-                    delete(model).where(model.run_id.in_(run_ids))
-                )
+                await session.execute(delete(model).where(model.run_id.in_(run_ids)))
             await session.execute(
                 update(ComputationRunLog)
                 .where(
@@ -307,9 +303,7 @@ class MetricsRepository:
             MetricComorbidityBreakdown.diagnosis_label.asc(),
             MetricComorbidityBreakdown.facility_id.asc().nullslast(),
         )
-        return await self._fetch_rows(
-            statement, MetricComorbidityBreakdown, run_id
-        )
+        return await self._fetch_rows(statement, MetricComorbidityBreakdown, run_id)
 
     async def out_of_control(
         self,
@@ -343,13 +337,9 @@ class MetricsRepository:
             MetricDataQualitySummary.period_start.asc(),
             MetricDataQualitySummary.facility_id.asc().nullslast(),
         )
-        return await self._fetch_rows(
-            statement, MetricDataQualitySummary, run_id
-        )
+        return await self._fetch_rows(statement, MetricDataQualitySummary, run_id)
 
-    async def last_computed_at(
-        self, *, run_id: UUID | None = None
-    ) -> datetime | None:
+    async def last_computed_at(self, *, run_id: UUID | None = None) -> datetime | None:
         try:
             async with self._session.begin() as session:
                 effective_run_id = run_id or await self._latest_run_id_for_session(
@@ -385,18 +375,10 @@ class MetricsRepository:
 
     @staticmethod
     def _scope_aggregate(statement: Select, model: Any, scope: MetricsScope):
-        if scope.kind == "all":
-            return statement.where(model.facility_id.is_not(None))
-        if scope.kind == "rollup":
-            return statement.where(model.facility_id.is_(None))
         return statement.where(model.facility_id == scope.facility_id)
 
     @staticmethod
     def _scope_patient_state(statement: Select, scope: MetricsScope):
-        if scope.kind == "rollup":
-            raise ValueError("rollup scope is invalid for patient state")
-        if scope.kind == "all":
-            return statement.where(PatientCurrentState.facility_id.is_not(None))
         return statement.where(PatientCurrentState.facility_id == scope.facility_id)
 
     async def recent_runs(self, *, limit: int = 20) -> list[dict]:

@@ -6,7 +6,7 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class Issue:
-    severity: Literal["INVALID", "SUSPICIOUS"]
+    severity: Literal["INVALID"]
     code: str
 
 

@@ -18,7 +18,7 @@ class PeriodGrain(str, Enum):
 
 
 class PeriodSummaryRow(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: datetime
     period_end: datetime
@@ -45,7 +45,7 @@ class PeriodSummaryRow(BaseModel):
 
 
 class ComorbidityRow(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: datetime
     diagnosis_label: str
@@ -55,7 +55,7 @@ class ComorbidityRow(BaseModel):
 
 class PatientStateRow(BaseModel):
     patient_key: str
-    facility_id: UUID | None
+    facility_id: UUID
     ho_ten: str | None
     sdt: str | None
     dia_chi: str | None
@@ -75,15 +75,15 @@ class PatientStateRow(BaseModel):
 
 
 class DataQualityRow(BaseModel):
-    facility_id: UUID | None
+    facility_id: UUID
     period_grain: str
     period_start: datetime
     period_end: datetime
     files_processed: int
     avg_mapping_coverage_ratio: float | None
     total_rows_seen: int
-    accepted_clean_rows: int
-    accepted_with_flags_rows: int
+    accepted_rows: int
     rejected_rows: int
+    ignored_duplicate_row_count: int
     top_issue_codes: list[dict[str, Any]]
     computed_at: datetime

@@ -86,9 +86,7 @@ def split_icd(plan: FieldPlan, row: dict[str, Any]) -> str | None:
     ]
     if not values:
         return None
-    return classify_icd(";".join(str(value) for value in values)).get(
-        plan.target_field
-    )
+    return classify_icd(";".join(str(value) for value in values)).get(plan.target_field)
 
 
 def derive_gender(plan: FieldPlan, row: dict[str, Any]) -> str | None:

@@ -134,38 +134,38 @@ def check_visit_date(visit: date, reference_date: date) -> Issue | None:
 def check_person_name(text) -> Issue | None:
     try:
         if not isinstance(text, str):
-            return Issue("SUSPICIOUS", "NAME_INVALID_CHARS")
+            return Issue("INVALID", "NAME_INVALID_CHARS")
         if any(character.isdigit() for character in text):
-            return Issue("SUSPICIOUS", "NAME_CONTAINS_DIGIT")
+            return Issue("INVALID", "NAME_CONTAINS_DIGIT")
         allowed_punctuation = {" ", "'", ".", "-"}
         if any(
             not character.isalpha() and character not in allowed_punctuation
             for character in text
         ):
-            return Issue("SUSPICIOUS", "NAME_INVALID_CHARS")
+            return Issue("INVALID", "NAME_INVALID_CHARS")
         if sum(character.isalpha() for character in text) < 2:
-            return Issue("SUSPICIOUS", "NAME_TOO_SHORT")
+            return Issue("INVALID", "NAME_TOO_SHORT")
         return None
     except (AttributeError, TypeError, ValueError):
-        return Issue("SUSPICIOUS", "NAME_INVALID_CHARS")
+        return Issue("INVALID", "NAME_INVALID_CHARS")
 
 
 def check_icd_family(field, codes: str) -> Issue | None:
     try:
         expected = {"icd_tha": "I", "icd_dtd": "E"}.get(field)
         if expected is None or not isinstance(codes, str):
-            return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
+            return Issue("INVALID", "ICD_FAMILY_MISMATCH")
         tokens = [token for token in re.split(r"[,;\s]+", codes.strip()) if token]
         if not tokens:
-            return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
+            return Issue("INVALID", "ICD_FAMILY_MISMATCH")
         for token in tokens:
             if not _ICD_RE.fullmatch(token) or token[0].upper() != expected:
-                return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
+                return Issue("INVALID", "ICD_FAMILY_MISMATCH")
             if expected == "E" and token[1:3] == "15":
-                return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
+                return Issue("INVALID", "ICD_FAMILY_MISMATCH")
         return None
     except (AttributeError, IndexError, TypeError, ValueError):
-        return Issue("SUSPICIOUS", "ICD_FAMILY_MISMATCH")
+        return Issue("INVALID", "ICD_FAMILY_MISMATCH")
 
 
 __all__ = [

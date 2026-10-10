@@ -14,8 +14,17 @@ from backend.timezone import now_vietnam
 class FileInfo(Base):
     __tablename__ = "ingestion_files"
     __table_args__ = (
-        UniqueConstraint("content_hash", name="ingestion_files_content_hash_unique"),
+        UniqueConstraint(
+            "facility_id",
+            "content_hash",
+            name="ingestion_files_facility_hash_unique",
+        ),
         Index("ingestion_files_status_idx", "status"),
+        Index(
+            "ingestion_files_facility_created_idx",
+            "facility_id",
+            text("created_at DESC"),
+        ),
         {"schema": "Files"},
     )
 
@@ -23,9 +32,7 @@ class FileInfo(Base):
         PG_UUID(as_uuid=True), primary_key=True, nullable=False
     )
     object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    facility_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
 
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
@@ -55,6 +62,18 @@ class FileInfo(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     accepted_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # WP-06 lineage/artifact columns (migration 011)
+    parent_file_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    ignored_duplicate_row_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    rejection_artifact_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_artifact_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Wave 1A additions (CONTRACTS §3)
     attempt_count: Mapped[int] = mapped_column(

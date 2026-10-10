@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 from uuid import UUID
 
 from backend.database.errors import FileObjectNotFound, StorageUnavailable
-from backend.database.service import (
-    IngestionRepository,
-    ReportRepository,
-    StorageService,
+from backend.database.service import IngestionRepository, StorageService
+from backend.database.service.production.persistence import (
+    AcceptedDataPersistence,
+    PersistRecord,
+    PersistRequest,
+    PersistReview,
 )
-from backend.database.service.production.repository import ReviewInput
+from backend.database.service.storage import (
+    artifact_expires_at,
+    rejection_key_for_file,
+)
+from backend.domain.processing.artifact.rejection_xlsx import build_rejection_xlsx
 from backend.domain.processing.engine import TransformPipeline
 from backend.domain.processing.mapping import MappingSourceUnavailable
 from backend.domain.processing.models import (
@@ -19,6 +26,8 @@ from backend.domain.processing.models import (
     FileStatus,
     ProcessingStage,
     QualityReport,
+    RowDisposition,
+    TransformResult,
 )
 from backend.domain.processing.reader.errors import ReaderError
 from backend.timezone import now_vietnam
@@ -27,21 +36,41 @@ from . import error_codes
 
 logger = logging.getLogger(__name__)
 
+_XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+_MAPPING_COVERAGE_REASON = "MAPPING_COVERAGE_BELOW_MINIMUM"
+
+
+def max_source_rows_from_env() -> int:
+    """Data-row limit for one file (A-3); ``0`` means unlimited."""
+
+    try:
+        return int(os.getenv("MAX_SOURCE_ROWS", "50000"))
+    except ValueError:
+        return 50000
+
 
 class FileProcessor:
-    """Application adapter connecting storage, pipeline and repositories."""
+    """Application adapter connecting storage, pipeline and repositories.
+
+    Order per Plan §4.6 (D-21): claim → read → transform → artifact put →
+    persist (one application-DB transaction) → staging status update. The
+    status update happens only after persist returns because staging and
+    application are different databases; a crash between them is recovered
+    by stale reclaim + idempotent rerun.
+    """
 
     def __init__(
         self,
         staging_repository: IngestionRepository,
-        production_repository: ReportRepository,
+        persistence: AcceptedDataPersistence,
         storage: StorageService,
         mapping_provider: Any | None = None,
         policy: FileAcceptancePolicy | None = None,
         operation_handlers: dict[Any, Any] | None = None,
     ) -> None:
         self._staging = staging_repository
-        self._production = production_repository
+        self._persistence = persistence
         self._storage = storage
         self._mapping_provider = mapping_provider
         self._policy = policy
@@ -83,6 +112,7 @@ class FileProcessor:
                 result = await self._apply_transform(
                     file_id, filename, file_bytes, mappings, source
                 )
+                transformed_at = now_vietnam()
             except MappingSourceUnavailable:
                 await self._fail(file_id, error_codes.MAPPING_SOURCE_UNAVAILABLE)
                 return
@@ -97,66 +127,92 @@ class FileProcessor:
                 await self._fail(file_id, error_codes.UNEXPECTED_TRANSFORM_ERROR)
                 return
 
+            if self._over_row_limit(result):
+                self._mark_row_limit_rejection(result)
+                await self._reject_file_level(
+                    file_id,
+                    result,
+                    mapping_source_value,
+                    file_info,
+                    error_code=error_codes.ROW_LIMIT_EXCEEDED,
+                    file_level_reason=error_codes.ROW_LIMIT_EXCEEDED,
+                )
+                return
+
             if result.quality_report.decision is FileDecision.REJECTED:
-                await self._reject_result(
-                    file_id, result.quality_report, mapping_source_value, file_info
+                await self._reject_file_level(
+                    file_id,
+                    result,
+                    mapping_source_value,
+                    file_info,
+                    error_code=None,
+                    file_level_reason=_MAPPING_COVERAGE_REASON,
                 )
                 return
 
-            if file_info is None or file_info.facility_id is None:
+            if (
+                file_info is None
+                or file_info.facility_id is None
+                or file_info.uploaded_at is None
+            ):
                 await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
                 return
 
-            reviews = [
-                ReviewInput(
-                    source_row_number=review.source_row_number,
-                    disposition=review.disposition.value,
-                    issue_codes=review.issue_codes,
-                )
-                for review in result.review_records
-            ]
+            request = self._persist_request(
+                result,
+                facility_id=file_info.facility_id,
+                source_file_uploaded_at=file_info.uploaded_at,
+                transformed_at=transformed_at,
+            )
+
+            artifact_key, artifact_expires = await self._write_success_artifact(
+                file_id, result, facility_id=file_info.facility_id
+            )
+            if artifact_key is None and self._needs_success_artifact(result):
+                # _write_success_artifact already recorded ARTIFACT_WRITE_FAILED.
+                return
+
             try:
-                persistence = await self._production.replace_file_result(
-                    source_file_id=file_id,
-                    facility_id=file_info.facility_id,
-                    rows=result.accepted_rows,
-                    source_row_numbers=result.accepted_row_numbers,
-                    reviews=reviews,
-                    source_size_bytes=file_info.size_bytes,
-                )
-            except Exception:
+                persistence = await self._persistence.persist(request)
+            except Exception:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
                 await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
-                raise
+                return
 
             result.quality_report.metadata.update(
                 {
                     "persistence_attempted": persistence.attempted,
-                    "persistence_inserted": persistence.inserted,
-                    "persistence_skipped": 0,
-                    "review_rows": persistence.reviews_inserted,
-                    "replaced_report_rows": persistence.deleted_reports,
+                    "persistence_applied": persistence.applied,
+                    "persistence_superseded": persistence.superseded,
+                    "persistence_released": persistence.released,
+                    "reviews_written": persistence.reviews_written,
                     "mapping_source": mapping_source_value,
                 }
             )
             result.quality_report.facility_id = file_info.facility_id
-            await self._staging.update(
-                file_id,
-                {
-                    "status": FileStatus.SUCCEED,
-                    "completed_at": now_vietnam(),
-                    "accepted_row_count": result.accepted_row_count,
-                    "rejected_row_count": result.rejected_row_count,
-                    "quality_report": result.quality_report.model_dump(mode="json"),
-                    "error_code": None,
-                    "error_message": None,
-                },
-            )
+            values: dict[str, Any] = {
+                "status": FileStatus.SUCCEED,
+                "completed_at": now_vietnam(),
+                "accepted_row_count": result.accepted_row_count,
+                "rejected_row_count": result.rejected_row_count,
+                "ignored_duplicate_row_count": result.ignored_duplicate_row_count,
+                "quality_report": result.quality_report.model_dump(mode="json"),
+                "error_code": None,
+                "error_message": None,
+            }
+            if artifact_key is not None and artifact_expires is not None:
+                values["rejection_artifact_key"] = artifact_key
+                values["rejection_artifact_expires_at"] = artifact_expires
+            await self._staging.update(file_id, values)
             self._log_terminal(
                 file_id,
                 FileStatus.SUCCEED,
-                attempt=(getattr(file_info, "attempt_count", None) if file_info is not None else None),
+                attempt=(
+                    getattr(file_info, "attempt_count", None)
+                    if file_info is not None
+                    else None
+                ),
                 rows_accepted=result.accepted_row_count,
-                rows_review=persistence.reviews_inserted,
+                rows_review=persistence.reviews_written,
             )
         except Exception as exc:
             logger.exception(
@@ -170,6 +226,158 @@ class FileProcessor:
                 )
             raise
 
+    def _persist_request(
+        self,
+        result: TransformResult,
+        *,
+        facility_id: UUID,
+        source_file_uploaded_at: Any,
+        transformed_at: Any,
+    ) -> PersistRequest:
+        records = [
+            PersistRecord(values=dict(record.row.model_dump()))
+            for record in result.accepted_records
+        ]
+        reviews = [
+            PersistReview(
+                source_row_number=decision.source_row_number,
+                disposition=decision.disposition.value,
+                duplicate_role=decision.duplicate_role.value,
+                merged_into_row=decision.merged_into_row,
+                group_row_numbers=list(decision.group_row_numbers),
+                issue_codes=list(decision.issue_codes),
+            )
+            for decision in result.decisions
+        ]
+        return PersistRequest(
+            source_file_id=result.file_id,
+            facility_id=facility_id,
+            source_file_uploaded_at=source_file_uploaded_at,
+            transformed_at=transformed_at,
+            records=records,
+            reviews=reviews,
+        )
+
+    def _over_row_limit(self, result: TransformResult) -> bool:
+        limit = max_source_rows_from_env()
+        if limit == 0:
+            return False
+        return result.quality_report.total_rows > limit
+
+    @staticmethod
+    def _mark_row_limit_rejection(result: TransformResult) -> None:
+        total = result.quality_report.total_rows
+        result.quality_report.decision = FileDecision.REJECTED
+        result.quality_report.processing_stage = ProcessingStage.POLICY
+        result.quality_report.accepted_rows = 0
+        result.quality_report.rejected_rows = total
+        result.quality_report.ignored_duplicate_row_count = 0
+        result.accepted_records = []
+        result.accepted_row_count = 0
+        result.rejected_row_count = total
+        result.ignored_duplicate_row_count = 0
+        result.quality_report.issue_code_counts[error_codes.ROW_LIMIT_EXCEEDED] = (
+            result.quality_report.issue_code_counts.get(
+                error_codes.ROW_LIMIT_EXCEEDED, 0
+            )
+            + 1
+        )
+
+    @staticmethod
+    def _needs_success_artifact(result: TransformResult) -> bool:
+        return any(
+            decision.disposition is RowDisposition.REJECTED
+            for decision in result.decisions
+        )
+
+    async def _write_success_artifact(
+        self, file_id: UUID, result: TransformResult, *, facility_id: UUID
+    ) -> tuple[str | None, Any]:
+        if result.source is None or not self._needs_success_artifact(result):
+            return None, None
+        try:
+            payload = build_rejection_xlsx(
+                result.source,
+                result.decisions,
+                file_level_reason=None,
+                file_id=file_id,
+            )
+            key = rejection_key_for_file(facility_id, file_id)
+            await self._storage.put_object(key, payload, _XLSX_CONTENT_TYPE)
+            return key, artifact_expires_at(now_vietnam())
+        except Exception:  # noqa: BLE001 - any artifact failure maps to ARTIFACT_WRITE_FAILED
+            await self._fail(file_id, error_codes.ARTIFACT_WRITE_FAILED)
+            return None, None
+
+    async def _reject_file_level(
+        self,
+        file_id: UUID,
+        result: TransformResult,
+        mapping_source: str,
+        file_info: Any,
+        *,
+        error_code: str | None,
+        file_level_reason: str | None,
+    ) -> None:
+        report = result.quality_report
+        try:
+            released = await self._persistence.release_file(file_id)
+        except Exception:  # noqa: BLE001 - release failure maps to PERSISTENCE_FAILED
+            await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
+            return
+
+        artifact_key: str | None = None
+        artifact_expires: Any = None
+        if (
+            file_level_reason is not None
+            and result.source is not None
+            and report.total_rows > 0
+            and file_info is not None
+            and getattr(file_info, "facility_id", None) is not None
+        ):
+            try:
+                payload = build_rejection_xlsx(
+                    result.source,
+                    result.decisions,
+                    file_level_reason=file_level_reason,
+                    file_id=file_id,
+                )
+                artifact_key = rejection_key_for_file(file_info.facility_id, file_id)
+                await self._storage.put_object(
+                    artifact_key, payload, _XLSX_CONTENT_TYPE
+                )
+                artifact_expires = artifact_expires_at(now_vietnam())
+            except Exception:  # noqa: BLE001 - any artifact failure maps to ARTIFACT_WRITE_FAILED
+                await self._fail(file_id, error_codes.ARTIFACT_WRITE_FAILED)
+                return
+
+        report.metadata.update(
+            {
+                "persistence_attempted": 0,
+                "persistence_applied": 0,
+                "persistence_superseded": 0,
+                "persistence_released": released,
+                "reviews_written": 0,
+                "mapping_source": mapping_source,
+            }
+        )
+        report.facility_id = file_info.facility_id if file_info is not None else None
+        values: dict[str, Any] = {
+            "status": FileStatus.REJECTED,
+            "completed_at": now_vietnam(),
+            "accepted_row_count": 0,
+            "rejected_row_count": report.total_rows,
+            "ignored_duplicate_row_count": 0,
+            "quality_report": report.model_dump(mode="json"),
+            "error_code": error_code,
+            "error_message": error_code,
+        }
+        if artifact_key is not None and artifact_expires is not None:
+            values["rejection_artifact_key"] = artifact_key
+            values["rejection_artifact_expires_at"] = artifact_expires
+        await self._staging.update(file_id, values)
+        self._log_terminal(file_id, FileStatus.REJECTED)
+
     async def _reject_result(
         self,
         file_id: UUID,
@@ -179,17 +387,17 @@ class FileProcessor:
         error_code: str | None = None,
     ) -> None:
         try:
-            deleted_reports, _deleted_reviews = await self._production.purge_file(file_id)
-        except Exception:  # noqa: BLE001 - purge failure maps to PERSISTENCE_FAILED
+            released = await self._persistence.release_file(file_id)
+        except Exception:  # noqa: BLE001 - release failure maps to PERSISTENCE_FAILED
             await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
             return
         report.metadata.update(
             {
                 "persistence_attempted": 0,
-                "persistence_inserted": 0,
-                "persistence_skipped": 0,
-                "review_rows": 0,
-                "replaced_report_rows": deleted_reports,
+                "persistence_applied": 0,
+                "persistence_superseded": 0,
+                "persistence_released": released,
+                "reviews_written": 0,
                 "mapping_source": mapping_source,
             }
         )
@@ -201,6 +409,7 @@ class FileProcessor:
                 "completed_at": now_vietnam(),
                 "accepted_row_count": 0,
                 "rejected_row_count": report.total_rows,
+                "ignored_duplicate_row_count": 0,
                 "quality_report": report.model_dump(mode="json"),
                 "error_code": error_code,
                 "error_message": error_code,
@@ -283,4 +492,4 @@ class FileProcessor:
         }.get(type(error).__name__, error_codes.INVALID_INPUT)
 
 
-__all__ = ["FileProcessor"]
+__all__ = ["FileProcessor", "max_source_rows_from_env"]

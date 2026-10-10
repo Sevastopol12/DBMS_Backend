@@ -8,7 +8,7 @@ from backend.database.canonical import CANONICAL_FIELD_SET
 from backend.timezone import VIETNAM_TZ
 
 from ...identifiers_helper import classify_bhxh
-from ...models import RuleMode, ValidationPolicy
+from ...models import ValidationPolicy
 from ..normalization import (
     normalize_datetime,
     normalize_identifier,
@@ -29,10 +29,9 @@ from .core import (
     ValidationState,
     _canonical_decimal,
     _canonical_glucose,
-    _mode,
-    _plausibility_mode,
     _require_reference_date,
-    _with_issue,
+    apply_issue,
+    plausibility_applies,
     text_quality,
 )
 
@@ -48,12 +47,8 @@ def _validate_cccd(
         return ValidationResult(
             state=ValidationState.VALID, normalized_value=normalized
         )
-    if normalized is not None and normalized.isdigit():
-        return ValidationResult(
-            state=ValidationState.SUSPICIOUS,
-            normalized_value=normalized,
-            flags=["SUSPICIOUS_CCCD"],
-        )
+    # Every non-12-digit identifier is INVALID, including 13-digit values
+    # and legacy 9-digit values that the old pipeline only flagged.
     return ValidationResult(
         state=ValidationState.INVALID,
         issue_code="INVALID_CCCD",
@@ -68,10 +63,9 @@ def _validate_bhyt(
     compact = re.sub(r"[\s-]", "", normalized or "").upper()
     if 8 <= len(compact) <= 20 and compact.isalnum():
         result = ValidationResult(state=ValidationState.VALID, normalized_value=compact)
-        mode = _mode(policy, "bhxh_era")
-        if mode is not RuleMode.OFF:
+        if policy is not None and policy.plausibility_enabled:
             _, issue = classify_bhxh(compact)
-            return _with_issue(result, mode, issue)
+            return apply_issue(result, issue)
         return result
     return ValidationResult(
         state=ValidationState.INVALID,
@@ -119,11 +113,10 @@ def _validate_birth_year(
     else:
         result = None
     if result is not None:
-        mode = _plausibility_mode(policy, field)
-        if mode is not RuleMode.OFF:
+        if plausibility_applies(policy, field):
             reference = _require_reference_date(policy)
             issue = check_birth_year(int(str(result.normalized_value)[:4]), reference)
-            return _with_issue(result, mode, issue)
+            return apply_issue(result, issue)
         return result
     return ValidationResult(
         state=ValidationState.INVALID,
@@ -144,13 +137,12 @@ def _validate_visit_date(
                 state=ValidationState.VALID, normalized_value=parsed
             )
         except (TypeError, ValueError):
-            result = ValidationResult(
+            return ValidationResult(
                 state=ValidationState.INVALID,
                 issue_code="INVALID_VISIT_DATE",
                 normalized_value=value,
             )
-    mode = _plausibility_mode(policy, field)
-    if mode is not RuleMode.OFF:
+    if plausibility_applies(policy, field):
         reference = _require_reference_date(policy)
         parsed = normalize_datetime(value)
         if parsed is None:
@@ -166,7 +158,7 @@ def _validate_visit_date(
             else parsed.date()
         )
         issue = check_visit_date(vietnam_date, reference)
-        return _with_issue(result, mode, issue)
+        return apply_issue(result, issue)
     return result
 
 
@@ -190,7 +182,6 @@ def _validate_numeric(
     field: str, value: Any, policy: ValidationPolicy | None
 ) -> ValidationResult:
     normalized = normalize_text(value)
-    legacy_result = None
     if normalized and re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?", normalized):
         legacy_result = ValidationResult(
             state=ValidationState.VALID,
@@ -202,8 +193,7 @@ def _validate_numeric(
             issue_code=f"INVALID_{field.upper()}",
             normalized_value=normalized,
         )
-    mode = _plausibility_mode(policy, field)
-    if mode is RuleMode.OFF:
+    if not plausibility_applies(policy, field):
         return legacy_result
     parsed = parse_measurement(value)
     if parsed is None:
@@ -219,7 +209,7 @@ def _validate_numeric(
             else _canonical_decimal(candidate)
         ),
     )
-    return _with_issue(result, mode, check_numeric(field, value))
+    return apply_issue(result, check_numeric(field, value))
 
 
 def _validate_icd(
@@ -232,11 +222,8 @@ def _validate_icd(
             state=ValidationState.VALID,
             normalized_value=", ".join(code.upper() for code in codes),
         )
-        mode = _plausibility_mode(policy, field)
-        if mode is not RuleMode.OFF:
-            return _with_issue(
-                result, mode, check_icd_family(field, result.normalized_value)
-            )
+        if plausibility_applies(policy, field):
+            return apply_issue(result, check_icd_family(field, result.normalized_value))
         return result
     return ValidationResult(
         state=ValidationState.INVALID,
@@ -249,9 +236,8 @@ def _validate_name(
     field: str, value: Any, policy: ValidationPolicy | None
 ) -> ValidationResult:
     result = text_quality(value, field=field)
-    mode = _plausibility_mode(policy, field)
-    if mode is not RuleMode.OFF and result.state is ValidationState.VALID:
-        return _with_issue(result, mode, check_person_name(result.normalized_value))
+    if plausibility_applies(policy, field) and result.state is ValidationState.VALID:
+        return apply_issue(result, check_person_name(result.normalized_value))
     return result
 
 
@@ -283,7 +269,7 @@ def validate_field(
         policy = policy.model_copy(update={"reference_date": reference_date})
     if field not in CANONICAL_FIELD_SET:
         return ValidationResult(
-            state=ValidationState.UNKNOWN, issue_code="UNKNOWN_FIELD"
+            state=ValidationState.INVALID, issue_code="UNKNOWN_FIELD"
         )
     if value is None or (isinstance(value, str) and not value.strip()):
         return ValidationResult(state=ValidationState.MISSING, issue_code="MISSING")

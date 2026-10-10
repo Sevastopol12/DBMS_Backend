@@ -2,7 +2,7 @@ import os
 
 from kombu import Exchange, Queue
 
-from .settings import SweepSettings
+from .settings import ArtifactSettings, SweepSettings
 
 broker_url = os.getenv("BROKER_URL")
 broker_connection_retry_on_startup = True
@@ -23,9 +23,11 @@ task_routes = {
     "backend.worker.tasks.transform.transform": {"queue": "transform"},
     "backend.worker.tasks.compute.compute_metrics": {"queue": "compute_metrics"},
     "backend.worker.tasks.sweep.transform_sweep": {"queue": "maintenance"},
+    "backend.worker.tasks.artifacts.purge_expired_artifacts": {"queue": "maintenance"},
 }
 
 _settings = SweepSettings.from_env()
+_artifact_settings = ArtifactSettings.from_env()
 
 # Redis-backed RedBeat avoids the default file scheduler on multi-replica workers.
 beat_schedule = {
@@ -38,7 +40,12 @@ beat_schedule = {
         "task": "backend.worker.tasks.sweep.transform_sweep",
         "schedule": _settings.sweep_interval_seconds,
         "options": {"expires": _settings.sweep_interval_seconds},
-    }
+    },
+    "purge-artifacts-daily": {
+        "task": "backend.worker.tasks.artifacts.purge_expired_artifacts",
+        "schedule": _artifact_settings.purge_interval_seconds,
+        "options": {"expires": _artifact_settings.purge_interval_seconds},
+    },
 }
 
-imports = "backend.worker.tasks"
+imports = ("backend.worker.tasks", "backend.worker.tasks.artifacts")

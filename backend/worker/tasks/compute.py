@@ -20,15 +20,20 @@ logger = logging.getLogger(__name__)
 
 @celery.task(bind=True, name="backend.worker.tasks.compute.compute_metrics")
 def compute_metrics(self, force: bool = False, trigger: str = "SCHEDULED") -> None:
-    run(_compute_metrics(
-        force=force,
-        trigger=trigger,
-        celery_task_id=getattr(self.request, "id", None),
-    ))
+    run(
+        _compute_metrics(
+            force=force,
+            trigger=trigger,
+            celery_task_id=getattr(self.request, "id", None),
+        )
+    )
 
 
 async def _compute_metrics(
-    *, force: bool = False, trigger: str = "SCHEDULED", celery_task_id: str | None = None
+    *,
+    force: bool = False,
+    trigger: str = "SCHEDULED",
+    celery_task_id: str | None = None,
 ) -> None:
     pool = replace(task_pool_settings(), pre_ping=True)
     async with task_resources(pool=pool) as resources:
@@ -47,7 +52,9 @@ async def _compute_metrics(
                     celery_task_id=celery_task_id,
                 )
             except Exception as exc:  # noqa: BLE001 - run log bookkeeping must not fail task
-                logger.warning("computation workflow run start failed error=%s", type(exc).__name__)
+                logger.warning(
+                    "computation workflow run start failed error=%s", type(exc).__name__
+                )
 
         try:
             outcome = await ComputeProcessor(
@@ -77,7 +84,11 @@ async def _compute_metrics(
                 if outcome.status == "SUCCEEDED"
                 else WorkflowStatus.SKIPPED.value
             )
-            details = {} if status == WorkflowStatus.SUCCEEDED.value else {"outcome": outcome.status}
+            details = (
+                {}
+                if status == WorkflowStatus.SUCCEEDED.value
+                else {"outcome": outcome.status}
+            )
             try:
                 await run_log.finish(
                     workflow_run_id,
@@ -87,7 +98,10 @@ async def _compute_metrics(
                     computation_run_id=outcome.computation_run_id,
                 )
             except Exception as exc:  # noqa: BLE001 - run log bookkeeping must not fail task
-                logger.warning("computation workflow run finish failed error=%s", type(exc).__name__)
+                logger.warning(
+                    "computation workflow run finish failed error=%s",
+                    type(exc).__name__,
+                )
 
 
 __all__ = ["compute_metrics"]

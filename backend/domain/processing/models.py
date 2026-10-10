@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import Iterable
 from datetime import date, datetime
 from enum import Enum
@@ -30,7 +29,6 @@ type SourceRow = dict[str, SourceCellValue]
 class ReportRow(BaseModel):
     ma_bhyt: str | None = None
     cccd: str | None = None
-    facility_id: uuid.UUID | None = None
 
     # Demographic
     ho_ten: str | None = None
@@ -67,11 +65,9 @@ class ReportRow(BaseModel):
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
-            # Preserve an already-constructed datetime object for callers
-            # that rely on model pass-through identity.  File ingestion uses
-            # normalize_datetime before constructing ReportRow, and the
-            # persistence boundary enforces awareness as a final guard.
-            return value
+            # Naive input is Vietnam local time; truncate to whole seconds
+            # per D-01 before grouping and persistence.
+            return ensure_vietnam_aware(value).replace(microsecond=0)
         if isinstance(value, date):
             return datetime.combine(value, datetime.min.time(), tzinfo=VIETNAM_TZ)
         if isinstance(value, str):
@@ -79,7 +75,9 @@ class ReportRow(BaseModel):
             if not text:
                 return None
             try:
-                return ensure_vietnam_aware(datetime.fromisoformat(text))
+                return ensure_vietnam_aware(datetime.fromisoformat(text)).replace(
+                    microsecond=0
+                )
             except ValueError:
                 pass
         raise ValueError("ngay_kham must be an ISO date or datetime")
@@ -224,55 +222,78 @@ class FileDecision(str, Enum):
     FAILED = "failed"
 
 
-class RuleMode(str, Enum):
-    OFF = "OFF"
-    FLAG = "FLAG"
-    GATE = "GATE"
-
-
 class ValidationPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    plausibility: RuleMode = RuleMode.GATE
-    cross_field: RuleMode = RuleMode.FLAG
-    cccd_structure: RuleMode = RuleMode.FLAG
-    bhxh_era: RuleMode = RuleMode.FLAG
+    plausibility_enabled: bool = True
     reference_date: date | None = None
 
 
 class RowDisposition(str, Enum):
     ACCEPTED = "ACCEPTED"
-    ACCEPTED_WITH_FLAGS = "ACCEPTED_WITH_FLAGS"
     REJECTED = "REJECTED"
 
 
-class RowIssueRecord(BaseModel):
+class DuplicateRole(str, Enum):
+    NONE = "NONE"
+    PRIMARY = "PRIMARY"
+    MERGED = "MERGED"
+
+
+class RowDecision(BaseModel):
+    """A rejection decision or an accepted duplicate row decision."""
+
     model_config = ConfigDict(extra="forbid")
 
     source_row_number: int = Field(ge=2)
     disposition: RowDisposition
-    issue_codes: list[str]
+    duplicate_role: DuplicateRole = DuplicateRole.NONE
+    merged_into_row: int | None = None
+    group_row_numbers: list[int] = Field(default_factory=list)
+    issue_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_duplicate_role(self) -> RowDecision:
+        if (
+            self.disposition is RowDisposition.ACCEPTED
+            and self.duplicate_role is not DuplicateRole.MERGED
+        ):
+            raise ValueError("accepted duplicate decisions must have MERGED role")
+        if self.duplicate_role is DuplicateRole.MERGED and self.merged_into_row is None:
+            raise ValueError("MERGED decisions must name merged_into_row")
+        return self
+
+
+class AcceptedRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row: ReportRow
+    primary_row_number: int = Field(ge=2)
+    contributing_row_numbers: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_primary_is_group_head(self) -> AcceptedRecord:
+        if not self.contributing_row_numbers:
+            raise ValueError("contributing_row_numbers must not be empty")
+        if self.primary_row_number != self.contributing_row_numbers[0]:
+            raise ValueError("primary_row_number must be the first contributing row")
+        return self
 
 
 class FieldQuality(BaseModel):
     valid: int = 0
     missing: int = 0
     invalid: int = 0
-    suspicious: int = 0
 
     @computed_field
     @property
     def valid_rate(self) -> float:
-        total = self.valid + self.missing + self.invalid + self.suspicious
+        total = self.valid + self.missing + self.invalid
         return self.valid / total if total else 0.0
 
 
 class QualityReport(BaseModel):
-    """Safe aggregate report; it intentionally contains no raw row values.
-
-    ``flagged_rows`` overlaps the accepted-with-flags and rejected counters;
-    it is retained as a diagnostic legacy field and is not a balanced counter.
-    """
+    """Safe aggregate report; it intentionally contains no raw row values."""
 
     file_id: UUID | None = None
     facility_id: UUID | None = None
@@ -284,29 +305,19 @@ class QualityReport(BaseModel):
     unmapped_headers: list[str] = Field(default_factory=list)
     ambiguous_headers: list[str] = Field(default_factory=list)
     total_rows: int = 0
-    accepted_clean_rows: int = 0
-    accepted_with_flags_rows: int = 0
     accepted_rows: int = 0
-    flagged_rows: int = 0
     rejected_rows: int = 0
+    ignored_duplicate_row_count: int = 0
+    quality_schema_version: int = 2
     field_quality: dict[str, FieldQuality] = Field(default_factory=dict)
     issue_code_counts: dict[str, int] = Field(default_factory=dict)
     safe_error_samples: list[dict[str, str | int]] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def synchronize_accepted_rows(self) -> QualityReport:
-        self.accepted_rows = (
-            self.accepted_clean_rows + self.accepted_with_flags_rows
-        )
-        return self
-
     @property
     def counts_balanced(self) -> bool:
         return (
-            self.accepted_clean_rows
-            + self.accepted_with_flags_rows
-            + self.rejected_rows
+            self.accepted_rows + self.rejected_rows + self.ignored_duplicate_row_count
             == self.total_rows
         )
 
@@ -319,37 +330,21 @@ class QualityReport(BaseModel):
 
 
 class FileAcceptancePolicy(BaseModel):
-    """Structural and explicitly configured quality gates for one source file.
+    """File-level acceptance gate for one source file.
 
-    Mapping coverage is the only file-level acceptance gate.  Validation
-    remains diagnostic; row acceptance is determined by ``ACCEPTANCE_FIELDS``.
-
-    The legacy quality-policy fields remain in the contract for callers that
-    still send them, but they do not alter acceptance semantics.
+    Mapping coverage is the only file-level acceptance gate. Row acceptance
+    is determined by ``ACCEPTANCE_FIELDS`` in the engine.
     """
 
     min_mapping_coverage: float = 0.5
     required_fields: tuple[str, ...] = ACCEPTANCE_FIELDS
-    min_valid_rate: float = 0.0
-    min_valid_rates: dict[str, float] = Field(default_factory=dict)
-    reject_if_all_rows_invalid: bool = False
     validation: ValidationPolicy = Field(default_factory=ValidationPolicy)
 
-    @field_validator("min_mapping_coverage", "min_valid_rate")
+    @field_validator("min_mapping_coverage")
     @classmethod
     def validate_rate(cls, value: float) -> float:
         if not 0 <= value <= 1:
             raise ValueError("rate thresholds must be between 0 and 1")
-        return value
-
-    @field_validator("min_valid_rates")
-    @classmethod
-    def validate_rates(cls, value: dict[str, float]) -> dict[str, float]:
-        for field, rate in value.items():
-            if field not in CANONICAL_FIELD_SET:
-                raise ValueError(f"Unknown canonical field: {field}")
-            if not 0 <= rate <= 1:
-                raise ValueError("rate thresholds must be between 0 and 1")
         return value
 
     @field_validator("required_fields")
@@ -368,58 +363,27 @@ class FileAcceptancePolicy(BaseModel):
         # turn into a file rejection when the structural mapping gate passes.
         return reasons
 
-    def row_rejection_reasons(
-        self, report: QualityReport, *, accepted_rows: int, total_rows: int
-    ) -> list[str]:
-        """Keep validation diagnostics separate from production acceptance."""
-        return []
-
 
 class TransformResult(BaseModel):
     file_id: UUID
-    accepted_rows: list[ReportRow] = Field(default_factory=list)
-    accepted_row_numbers: list[int] = Field(default_factory=list)
+    accepted_records: list[AcceptedRecord] = Field(default_factory=list)
+    decisions: list[RowDecision] = Field(default_factory=list)
     accepted_row_count: int = 0
     rejected_row_count: int = 0
+    ignored_duplicate_row_count: int = 0
     quality_report: QualityReport
-    review_records: list[RowIssueRecord] = Field(default_factory=list)
+    source: SourceDataset | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def synchronize_counts(self) -> TransformResult:
-        supplied_count = "accepted_row_count" in self.model_fields_set
-        if supplied_count and self.accepted_row_count != len(self.accepted_rows):
-            raise ValueError("accepted_row_count must match accepted_rows")
-        self.accepted_row_count = len(self.accepted_rows)
-        if self.accepted_rows and not self.accepted_row_numbers:
-            raise ValueError(
-                "accepted_row_numbers are required when accepted_rows are present"
-            )
-        if len(self.accepted_row_numbers) != self.accepted_row_count:
-            raise ValueError("accepted_row_numbers must match accepted_rows")
-        if any(
-            not isinstance(number, int) or number < 2
-            for number in self.accepted_row_numbers
-        ):
-            raise ValueError("accepted_row_numbers must be source data row numbers")
-        if len(set(self.accepted_row_numbers)) != len(self.accepted_row_numbers):
-            raise ValueError("accepted_row_numbers must be unique")
-        review_row_numbers = [
-            record.source_row_number for record in self.review_records
-        ]
-        if any(
-            record.disposition is RowDisposition.ACCEPTED
-            for record in self.review_records
-        ):
-            raise ValueError("review_records cannot contain clean accepted rows")
-        if len(set(review_row_numbers)) != len(review_row_numbers):
-            raise ValueError("review_records row numbers must be unique")
-        rejected_row_numbers = {
-            record.source_row_number
-            for record in self.review_records
-            if record.disposition is RowDisposition.REJECTED
-        }
-        if rejected_row_numbers.intersection(self.accepted_row_numbers):
-            raise ValueError("rejected review rows cannot be accepted rows")
+        if self.accepted_row_count != len(self.accepted_records):
+            raise ValueError("accepted_row_count must match accepted_records")
+        decision_rows = [decision.source_row_number for decision in self.decisions]
+        if len(set(decision_rows)) != len(decision_rows):
+            raise ValueError("decision row numbers must be unique")
+        accepted_rows = {record.primary_row_number for record in self.accepted_records}
+        if accepted_rows.intersection(decision_rows):
+            raise ValueError("a row cannot be both accepted and decided")
         return self
 
 
@@ -428,8 +392,10 @@ def safe_issue_sample(row_number: int, issue_code: str) -> dict[str, str | int]:
 
 
 __all__ = [
+    "AcceptedRecord",
     "CacheSource",
     "ColumnMap",
+    "DuplicateRole",
     "FieldPlan",
     "FieldQuality",
     "FileAcceptancePolicy",
@@ -441,9 +407,8 @@ __all__ = [
     "ProcessingStage",
     "QualityReport",
     "ReportRow",
+    "RowDecision",
     "RowDisposition",
-    "RowIssueRecord",
-    "RuleMode",
     "SourceCellValue",
     "SourceDataset",
     "SourceRow",
