@@ -22,6 +22,10 @@ class MetricsStoreUnavailable(DatabaseServiceError):
     pass
 
 
+class MetricsDataIntegrityError(DatabaseServiceError):
+    """Persisted metric rows failed DTO validation (data-quality problem)."""
+
+
 CONTENT_HASH_UNIQUE_CONSTRAINT = "ingestion_files_facility_hash_unique"
 COMPUTATION_RUN_SINGLE_RUNNING_INDEX = "computation_run_log_single_running"
 
@@ -50,6 +54,7 @@ __all__ = [
     "CONTENT_HASH_UNIQUE_CONSTRAINT",
     "DuplicatedContentError",
     "FileObjectNotFound",
+    "MetricsDataIntegrityError",
     "MetricsRunInProgress",
     "MetricsStoreUnavailable",
     "StorageUnavailable",

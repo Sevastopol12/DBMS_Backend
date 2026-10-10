@@ -165,7 +165,11 @@ class FileProcessor:
                 transformed_at=transformed_at,
             )
 
-            artifact_key, artifact_expires = await self._write_success_artifact(
+            (
+                artifact_key,
+                artifact_created,
+                artifact_expires,
+            ) = await self._write_success_artifact(
                 file_id, result, facility_id=file_info.facility_id
             )
             if artifact_key is None and self._needs_success_artifact(result):
@@ -174,7 +178,8 @@ class FileProcessor:
 
             try:
                 persistence = await self._persistence.persist(request)
-            except Exception:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
+            except Exception as exec:  # noqa: BLE001 - any persist failure maps to PERSISTENCE_FAILED
+                print(exec)
                 await self._fail(file_id, error_codes.PERSISTENCE_FAILED)
                 return
 
@@ -202,6 +207,8 @@ class FileProcessor:
             if artifact_key is not None and artifact_expires is not None:
                 values["rejection_artifact_key"] = artifact_key
                 values["rejection_artifact_expires_at"] = artifact_expires
+                values["artifact_created_at"] = artifact_created
+                values["artifact_purged_at"] = None
             await self._staging.update(file_id, values)
             self._log_terminal(
                 file_id,
@@ -292,9 +299,9 @@ class FileProcessor:
 
     async def _write_success_artifact(
         self, file_id: UUID, result: TransformResult, *, facility_id: UUID
-    ) -> tuple[str | None, Any]:
+    ) -> tuple[str | None, Any, Any]:
         if result.source is None or not self._needs_success_artifact(result):
-            return None, None
+            return None, None, None
         try:
             payload = build_rejection_xlsx(
                 result.source,
@@ -304,10 +311,11 @@ class FileProcessor:
             )
             key = rejection_key_for_file(facility_id, file_id)
             await self._storage.put_object(key, payload, _XLSX_CONTENT_TYPE)
-            return key, artifact_expires_at(now_vietnam())
+            created = now_vietnam()
+            return key, created, artifact_expires_at(created)
         except Exception:  # noqa: BLE001 - any artifact failure maps to ARTIFACT_WRITE_FAILED
             await self._fail(file_id, error_codes.ARTIFACT_WRITE_FAILED)
-            return None, None
+            return None, None, None
 
     async def _reject_file_level(
         self,
@@ -327,6 +335,7 @@ class FileProcessor:
             return
 
         artifact_key: str | None = None
+        artifact_created: Any = None
         artifact_expires: Any = None
         if (
             file_level_reason is not None
@@ -346,7 +355,8 @@ class FileProcessor:
                 await self._storage.put_object(
                     artifact_key, payload, _XLSX_CONTENT_TYPE
                 )
-                artifact_expires = artifact_expires_at(now_vietnam())
+                artifact_created = now_vietnam()
+                artifact_expires = artifact_expires_at(artifact_created)
             except Exception:  # noqa: BLE001 - any artifact failure maps to ARTIFACT_WRITE_FAILED
                 await self._fail(file_id, error_codes.ARTIFACT_WRITE_FAILED)
                 return
@@ -375,6 +385,8 @@ class FileProcessor:
         if artifact_key is not None and artifact_expires is not None:
             values["rejection_artifact_key"] = artifact_key
             values["rejection_artifact_expires_at"] = artifact_expires
+            values["artifact_created_at"] = artifact_created
+            values["artifact_purged_at"] = None
         await self._staging.update(file_id, values)
         self._log_terminal(file_id, FileStatus.REJECTED)
 

@@ -87,6 +87,26 @@ class StorageService:
             Key=obj_key,
         )
 
+    def exists(self, key: str) -> bool:
+        """Return whether an object exists using a synchronous S3 HEAD."""
+        try:
+            self.connection_config.client.head_object(
+                Bucket=self.connection_config.bucket,
+                Key=key,
+            )
+            return True
+        except ClientError as exc:
+            error = (exc.response or {}).get("Error", {})
+            code = str(error.get("Code", ""))
+            status = (
+                (exc.response or {}).get("ResponseMetadata", {}).get("HTTPStatusCode")
+            )
+            if code in {"NoSuchKey", "NotFound", "404"} or status == 404:
+                return False
+            raise StorageUnavailable() from exc
+        except (BotoCoreError, NoCredentialsError) as exc:
+            raise StorageUnavailable() from exc
+
     def get(self, obj_key: str) -> bytes | None:
         try:
             response = self.connection_config.client.get_object(

@@ -169,7 +169,9 @@ class AcceptedDataPersistence:
         timeout_ms = _statement_timeout_ms()
         await session.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
         await session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:fid::text, 0))"),
+            text(
+                "SELECT pg_advisory_xact_lock(hashtextextended(CAST(:fid AS text), 0))"
+            ),
             {"fid": str(req.source_file_id)},
         )
 
@@ -228,7 +230,7 @@ class AcceptedDataPersistence:
                     )
                     await session.execute(
                         text(
-                            "SELECT pg_advisory_xact_lock(hashtextextended(:fid::text, 0))"
+                            "SELECT pg_advisory_xact_lock(hashtextextended(CAST(:fid AS text), 0))"
                         ),
                         {"fid": str(source_file_id)},
                     )

@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -18,13 +19,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
 
-_PERIOD_GRAIN_CHECK = "period_grain IN ('3D','2W','3M','6M','TODAY','ALL')"
+_PERIOD_GRAIN_CHECK = "period_grain IN ('3D', '2W', '3M', '6M', 'TODAY', 'ALL')"
 
 
 class MetricPeriodSummary(Base):
     __tablename__ = "metric_period_summary"
     __table_args__ = (
-        CheckConstraint(_PERIOD_GRAIN_CHECK),
+        CheckConstraint(
+            _PERIOD_GRAIN_CHECK, name="metric_period_summary_period_grain_check"
+        ),
         UniqueConstraint(
             "run_id",
             "facility_id",
@@ -103,7 +106,10 @@ class MetricPeriodSummary(Base):
 class MetricComorbidityBreakdown(Base):
     __tablename__ = "metric_comorbidity_breakdown"
     __table_args__ = (
-        CheckConstraint(_PERIOD_GRAIN_CHECK),
+        CheckConstraint(
+            _PERIOD_GRAIN_CHECK,
+            name="metric_comorbidity_breakdown_period_grain_check",
+        ),
         UniqueConstraint(
             "run_id",
             "facility_id",
@@ -138,7 +144,15 @@ class MetricComorbidityBreakdown(Base):
 
 class PatientCurrentState(Base):
     __tablename__ = "patient_current_state"
-    __table_args__ = ({"schema": "Metrics"},)
+    __table_args__ = (
+        Index(
+            "patient_current_state_out_of_control_idx",
+            "run_id",
+            "facility_id",
+            postgresql_where=text("is_out_of_control"),
+        ),
+        {"schema": "Metrics"},
+    )
 
     run_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -148,7 +162,7 @@ class PatientCurrentState(Base):
     patient_key: Mapped[str] = mapped_column(Text, primary_key=True)
     facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     ho_ten: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sdt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sdt: Mapped[str | None] = mapped_column(Text, nullable=False)
     dia_chi: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_visit_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -180,7 +194,10 @@ class PatientCurrentState(Base):
 class MetricDataQualitySummary(Base):
     __tablename__ = "metric_data_quality_summary"
     __table_args__ = (
-        CheckConstraint(_PERIOD_GRAIN_CHECK),
+        CheckConstraint(
+            _PERIOD_GRAIN_CHECK,
+            name="metric_data_quality_summary_period_grain_check",
+        ),
         UniqueConstraint(
             "run_id",
             "facility_id",
@@ -235,7 +252,16 @@ class MetricDataQualitySummary(Base):
 class ComputationRunLog(Base):
     __tablename__ = "computation_run_log"
     __table_args__ = (
-        CheckConstraint("status IN ('RUNNING','SUCCEEDED','FAILED')"),
+        CheckConstraint(
+            "status IN ('RUNNING', 'SUCCEEDED', 'FAILED')",
+            name="computation_run_log_status_check",
+        ),
+        Index(
+            "computation_run_log_single_running",
+            text("(true)"),
+            unique=True,
+            postgresql_where=text("status = 'RUNNING'"),
+        ),
         {"schema": "Metrics"},
     )
 
@@ -260,8 +286,6 @@ class ComputationRunLog(Base):
     pruned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
-    # The partial single-RUNNING index is declared by migration 007, not ORM.
 
 
 __all__ = [
