@@ -192,7 +192,7 @@ async def _missing_required_tables(
         async with config.async_engine.connect() as connection:
             result = await connection.execute(
                 text("SELECT to_regclass(:table_name)"),
-                {"table_name": f'"{schema}".{name}'},
+                {"table_name": f'"{schema}"."{name}"'},
             )
             if result.scalar_one_or_none() is None:
                 missing.append(table)

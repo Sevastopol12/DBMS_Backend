@@ -5,6 +5,7 @@ from fastapi import Depends, Request
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
 from backend.api.metrics_service import MetricsService
+from backend.api.rejection_service import RejectionService
 from backend.api.resources import ApiResources
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.metrics.repository import MetricsRepository
@@ -74,6 +75,16 @@ def get_metrics_service(
 MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
 
 
+def get_rejection_service(
+    repository: IngestionRepositoryDep,
+    storage: StorageServiceDep,
+) -> RejectionService:
+    return RejectionService(repository=repository, storage=storage)
+
+
+RejectionServiceDep = Annotated[RejectionService, Depends(get_rejection_service)]
+
+
 def get_workflow_repository(
     res: ResourcesDep,
 ) -> WorkflowRunRepository:
@@ -105,6 +116,7 @@ __all__ = [
     "MetricsCacheDep",
     "MetricsRepositoryDep",
     "MetricsServiceDep",
+    "RejectionServiceDep",
     "ResourcesDep",
     "SessionDep",
     "StorageServiceDep",
@@ -115,6 +127,7 @@ __all__ = [
     "get_metrics_cache",
     "get_metrics_repository",
     "get_metrics_service",
+    "get_rejection_service",
     "get_resources",
     "get_storage_service",
     "get_workflow_repository",

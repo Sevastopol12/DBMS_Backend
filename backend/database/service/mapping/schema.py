@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Text, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
@@ -20,6 +20,11 @@ class HeaderMapping(Base):
         CheckConstraint(
             "btrim(target) <> ''",
             name="header_mapping_target_nonblank",
+        ),
+        Index(
+            "header_mapping_active_tier_idx",
+            "tier",
+            postgresql_where=text("active"),
         ),
         {"schema": "Mapping"},
     )

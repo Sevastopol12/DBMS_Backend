@@ -76,7 +76,7 @@ class PatientStateMetric(BaseModel):
     patient_key: str
     facility_id: UUID
     ho_ten: str | None
-    sdt: str | None
+    sdt: str
     dia_chi: str | None
     last_visit_date: ApiDateTime | None
     last_systolic: float | None = Field(default=None, allow_inf_nan=False)
@@ -183,6 +183,35 @@ class RejectionDownloadResponse(BaseModel):
     filename: str
 
 
+class RejectedArtifactItem(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    file_id: UUID
+    parent_file_id: UUID | None = None
+    file_status: str
+    state: Literal["available", "expired"]
+    artifact_created_at: ApiDateTime | None = None
+    artifact_expires_at: ApiDateTime | None = None
+    rejected_row_count: int = 0
+
+
+class RejectedArtifactListResponse(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    items: list[RejectedArtifactItem]
+    next_cursor: str | None = None
+    limit: int
+
+
+class RejectedArtifactDownload(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    file_id: UUID
+    download_url: str
+    artifact_filename: str
+    url_expires_at: ApiDateTime
+
+
 class MetricsGrainQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -267,6 +296,9 @@ __all__ = [
     "MetricsStatus",
     "PatientStateMetric",
     "PeriodSummaryMetric",
+    "RejectedArtifactDownload",
+    "RejectedArtifactItem",
+    "RejectedArtifactListResponse",
     "RejectionDownloadResponse",
     "UploadReportCreate",
     "_get_safe_filename",
