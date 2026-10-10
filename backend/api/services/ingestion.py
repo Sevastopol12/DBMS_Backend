@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 
-from backend.api.dto import (
+from backend.api.data_objects.ingestion import (
     IngestionComplete,
     IngestionCreate,
     IngestionResponse,

@@ -4,9 +4,9 @@ from fastapi import Depends, Request
 
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
-from backend.api.metrics_service import MetricsService
-from backend.api.rejection_service import RejectionService
 from backend.api.resources import ApiResources
+from backend.api.services.metrics import MetricsService
+from backend.api.services.rejection import RejectionService
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.metrics.repository import MetricsRepository
 from backend.database.service.production.repository import AcceptedDataRepository

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from backend.api.dto import (
+from backend.api.data_objects.rejections import (
     RejectedArtifactDownload,
     RejectedArtifactItem,
     RejectedArtifactListResponse,
