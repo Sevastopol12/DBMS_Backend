@@ -8,14 +8,14 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
-from backend.api.dependencies import get_ingestion_repository, get_storage_service
-from backend.api.dto import (
+from backend.api.data_objects.ingestion import (
     IngestionComplete,
     IngestionCreate,
     IngestionResponse,
     UploadReportCreate,
 )
-from backend.api.ingestion_service import (
+from backend.api.dependencies import get_ingestion_repository, get_storage_service
+from backend.api.services.ingestion import (
     IngestionService,
     ParentArtifactExpiredError,
     ParentNotFoundError,

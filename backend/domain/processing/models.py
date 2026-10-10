@@ -366,6 +366,7 @@ class FileAcceptancePolicy(BaseModel):
 
 class TransformResult(BaseModel):
     file_id: UUID
+    filename: str
     accepted_records: list[AcceptedRecord] = Field(default_factory=list)
     decisions: list[RowDecision] = Field(default_factory=list)
     accepted_row_count: int = 0

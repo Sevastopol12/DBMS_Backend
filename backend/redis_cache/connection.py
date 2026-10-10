@@ -13,7 +13,7 @@ def create_redis_pool() -> redis.ConnectionPool:
         port=os.getenv("CACHE_PORT"),
         db=db,
         password=os.getenv("CACHE_PASSWORD"),
-        ssl=ssl,
+        connection_class=redis.SSLConnection if ssl else redis.Connection,
         max_connections=10,
         socket_connect_timeout=1.0,
         socket_timeout=2.0,

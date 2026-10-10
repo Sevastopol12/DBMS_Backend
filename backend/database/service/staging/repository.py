@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from backend.database.base import Base
@@ -39,6 +39,62 @@ class RequeueResult:
 def _chunks(lst: list, size: int):
     for i in range(0, len(lst), size):
         yield lst[i : i + size]
+
+
+@dataclass(frozen=True)
+class RejectedArtifactRecord:
+    """Facility-scoped projection of a file's rejection artifact state."""
+
+    file_id: UUID
+    facility_id: UUID
+    source_filename: str
+    artifact_key: str
+    artifact_created_at: datetime | None
+    artifact_expires_at: datetime | None
+    artifact_purged_at: datetime | None
+    rejected_row_count: int
+    file_status: str
+    parent_file_id: UUID | None
+
+    @property
+    def created_at(self) -> datetime | None:
+        return self.artifact_created_at
+
+    @property
+    def expires_at(self) -> datetime | None:
+        return self.artifact_expires_at
+
+    @property
+    def purged_at(self) -> datetime | None:
+        return self.artifact_purged_at
+
+
+# Backward-compatible name used by existing file-list consumers.
+RejectionArtifactRecord = RejectedArtifactRecord
+
+
+def _to_rejection_record(row: FileInfo) -> RejectedArtifactRecord:
+    """Project a FileInfo row with an artifact key to its record shape."""
+    return RejectedArtifactRecord(
+        file_id=row.id,
+        facility_id=row.facility_id,
+        parent_file_id=row.parent_file_id,
+        source_filename=row.filename,
+        file_status=row.status,
+        artifact_key=row.rejection_artifact_key or "",
+        artifact_created_at=row.artifact_created_at,
+        artifact_expires_at=row.rejection_artifact_expires_at,
+        artifact_purged_at=row.artifact_purged_at,
+        rejected_row_count=row.rejected_row_count or 0,
+    )
+
+
+def _artifact_order_expr():
+    """Effective artifact creation time, falling back to file creation."""
+    return func.coalesce(
+        FileInfo.artifact_created_at,
+        FileInfo.created_at,
+    )
 
 
 class IngestionRepository:
@@ -449,9 +505,15 @@ class IngestionRepository:
     #
 
     async def set_artifact(
-        self, file_id: UUID, key: str, expires_at: datetime
+        self,
+        file_id: UUID,
+        key: str,
+        expires_at: datetime,
+        created_at: datetime | None = None,
     ) -> FileInfo | None:
         """Record the rejection artifact object key and its expiry."""
+        if created_at is None:
+            created_at = now_vietnam()
         async with self._session.begin() as session:
             result = await session.execute(
                 update(FileInfo)
@@ -459,7 +521,24 @@ class IngestionRepository:
                 .values(
                     rejection_artifact_key=key,
                     rejection_artifact_expires_at=expires_at,
+                    artifact_created_at=created_at,
+                    artifact_purged_at=None,
                 )
+                .returning(FileInfo)
+            )
+            return result.scalar_one_or_none()
+
+    async def mark_artifact_purged(
+        self, file_id: UUID, purged_at: datetime | None = None
+    ) -> FileInfo | None:
+        """Stamp purged_at after the object is deleted; key is retained."""
+        if purged_at is None:
+            purged_at = now_vietnam()
+        async with self._session.begin() as session:
+            result = await session.execute(
+                update(FileInfo)
+                .where(FileInfo.id == file_id)
+                .values(artifact_purged_at=purged_at)
                 .returning(FileInfo)
             )
             return result.scalar_one_or_none()
@@ -477,6 +556,127 @@ class IngestionRepository:
                 .returning(FileInfo)
             )
             return result.scalar_one_or_none()
+
+    async def get_rejection_artifact(
+        self, facility_id: UUID, file_id: UUID
+    ) -> RejectedArtifactRecord | None:
+        """Fetch one artifact record only when it belongs to ``facility_id``.
+
+        Rows without an artifact key are excluded (no-artifact → None).
+        """
+        async with self._session.begin() as session:
+            result = await session.execute(
+                select(FileInfo).where(
+                    FileInfo.id == file_id,
+                    FileInfo.facility_id == facility_id,
+                    or_(
+                        FileInfo.rejection_artifact_key.is_not(None),
+                        FileInfo.artifact_created_at.is_not(None),
+                        FileInfo.artifact_purged_at.is_not(None),
+                    ),
+                )
+            )
+            row = result.scalar_one_or_none()
+            return _to_rejection_record(row) if row is not None else None
+
+    async def get_rejected_artifact(
+        self, *, facility_id: UUID, file_id: UUID
+    ) -> RejectedArtifactRecord | None:
+        return await self.get_rejection_artifact(facility_id, file_id)
+
+    async def list_rejected_artifacts(
+        self,
+        *,
+        facility_id: UUID,
+        limit: int,
+        after: tuple[datetime, str] | None = None,
+        state_filter: str | None = None,
+        now: datetime,
+    ) -> list[RejectedArtifactRecord]:
+        """Return a facility's artifacts in stable newest-first keyset order."""
+        order_expr = _artifact_order_expr()
+        stmt = select(FileInfo).where(
+            FileInfo.facility_id == facility_id,
+            or_(
+                FileInfo.rejection_artifact_key.is_not(None),
+                FileInfo.artifact_created_at.is_not(None),
+                FileInfo.artifact_purged_at.is_not(None),
+            ),
+        )
+        if after is not None:
+            after_created, after_id = after
+            after_uuid = UUID(after_id)
+            stmt = stmt.where(
+                or_(
+                    order_expr < after_created,
+                    and_(order_expr == after_created, FileInfo.id < after_uuid),
+                )
+            )
+        if state_filter == "available":
+            stmt = stmt.where(
+                FileInfo.artifact_purged_at.is_(None),
+                FileInfo.rejection_artifact_expires_at > now,
+            )
+        elif state_filter == "expired":
+            stmt = stmt.where(
+                or_(
+                    FileInfo.artifact_purged_at.is_not(None),
+                    FileInfo.rejection_artifact_expires_at.is_(None),
+                    FileInfo.rejection_artifact_expires_at <= now,
+                )
+            )
+        elif state_filter is not None:
+            raise ValueError("unsupported artifact state filter")
+        stmt = stmt.order_by(order_expr.desc(), FileInfo.id.desc()).limit(limit + 1)
+        async with self._session.begin() as session:
+            result = await session.execute(stmt)
+            return [_to_rejection_record(row) for row in result.scalars().all()]
+
+    async def list_rejection_artifacts(
+        self,
+        facility_id: UUID,
+        *,
+        limit: int = 50,
+        after: (tuple[datetime | None, UUID] | RejectedArtifactRecord | None) = None,
+    ) -> list[RejectedArtifactRecord]:
+        """List artifact records of one facility, newest first (keyset).
+
+        Order is (created_at DESC, file_id DESC) where created_at is the
+        effective artifact creation time. ``after`` is the last record of
+        the previous page; fetching ``limit + 1`` is the caller's job.
+        """
+        order_expr = _artifact_order_expr()
+        stmt = select(FileInfo).where(
+            FileInfo.facility_id == facility_id,
+            FileInfo.rejection_artifact_key.is_not(None),
+        )
+        if after is not None:
+            if isinstance(after, RejectedArtifactRecord):
+                after_created: datetime | None = after.created_at
+                after_id: UUID = after.file_id
+            else:
+                after_created, after_id = after
+            if after_created is None:
+                stmt = stmt.where(
+                    and_(
+                        order_expr.is_(None),
+                        FileInfo.id < after_id,
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    or_(
+                        order_expr < after_created,
+                        and_(
+                            order_expr == after_created,
+                            FileInfo.id < after_id,
+                        ),
+                    )
+                )
+        stmt = stmt.order_by(order_expr.desc(), FileInfo.id.desc()).limit(limit)
+        async with self._session.begin() as session:
+            result = await session.execute(stmt)
+            return [_to_rejection_record(row) for row in result.scalars().all()]
 
     async def get_for_facility(
         self, file_id: UUID, facility_id: UUID
@@ -514,13 +714,14 @@ class IngestionRepository:
     async def list_expired_artifacts(
         self, now: datetime, limit: int = 1_000
     ) -> list[FileInfo]:
-        """Files whose artifact key is set and whose expiry is at or past ``now``."""
+        """Files whose artifact key is set, unpurged, and expired at ``now``."""
         async with self._session.begin() as session:
             result = await session.execute(
                 select(FileInfo)
                 .where(
                     FileInfo.rejection_artifact_key.is_not(None),
                     FileInfo.rejection_artifact_expires_at <= now,
+                    FileInfo.artifact_purged_at.is_(None),
                 )
                 .order_by(FileInfo.rejection_artifact_expires_at.asc())
                 .limit(limit)
@@ -549,4 +750,9 @@ def _file_to_dict(row: FileInfo) -> dict:
     }
 
 
-__all__ = ["IngestionRepository", "RequeueResult"]
+__all__ = [
+    "IngestionRepository",
+    "RejectedArtifactRecord",
+    "RejectionArtifactRecord",
+    "RequeueResult",
+]

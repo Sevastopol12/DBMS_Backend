@@ -1,23 +1,35 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.exceptions import HTTPException
+from fastapi.responses import RedirectResponse
 
 from backend.api.auth.dependencies import require_session
 from backend.api.auth.sessions import AuthSession
+from backend.api.data_objects.ingestion import (
+    FileDetailResponse,
+    _serialize_file_detail,
+)
+from backend.api.data_objects.rejections import (
+    RejectedArtifactDownload,
+    RejectedArtifactItem,
+    RejectedArtifactListResponse,
+    RejectionDownloadResponse,
+)
 from backend.api.dependencies import (
     get_ingestion_repository,
     get_mapping_cache,
-    get_storage_service,
+    get_rejection_service,
 )
-from backend.api.dto import (
-    FileDetailResponse,
-    RejectionDownloadResponse,
-    _serialize_file_detail,
+from backend.api.services.rejection import (
+    InvalidCursorError,
+    RejectionExpiredError,
+    RejectionNotFoundError,
+    RejectionService,
+    RejectionUnavailableError,
 )
-from backend.database.service import IngestionRepository, StorageService
-from backend.database.service.storage import presigned_get_ttl_from_env
+from backend.database.service import IngestionRepository
 from backend.domain.processing.mapping.legacy.legacy_cache import (
     MappingCache,
     MappingRequest,
@@ -32,7 +44,27 @@ Session = Annotated[AuthSession, Depends(require_session)]
 IngestionRepositoryDep = Annotated[
     IngestionRepository, Depends(get_ingestion_repository)
 ]
-StorageDep = Annotated[StorageService, Depends(get_storage_service)]
+RejectionServiceDep = Annotated[RejectionService, Depends(get_rejection_service)]
+
+
+def _not_found() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="rejection artifact not found",
+    )
+
+
+def _expired() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_410_GONE, detail="rejection artifact expired"
+    )
+
+
+def _unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="store unavailable",
+    )
 
 
 @router.get("/files", response_model=list[FileDetailResponse])
@@ -61,32 +93,89 @@ async def get_file(
     return _serialize_file_detail(row)
 
 
-@router.get("/files/{file_id}/rejections", response_model=RejectionDownloadResponse)
-async def download_rejections(
+@router.get("/rejections", response_model=RejectedArtifactListResponse)
+async def list_rejections(
+    session: Session,
+    service: RejectionServiceDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query()] = None,
+    state: Annotated[Literal["available", "expired"] | None, Query()] = None,
+) -> RejectedArtifactListResponse:
+    try:
+        return await service.list_artifacts(
+            facility_id=session.facility_id,
+            limit=limit,
+            cursor=cursor,
+            state=state,
+        )
+    except InvalidCursorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid cursor",
+        ) from exc
+    except RejectionUnavailableError as exc:
+        raise _unavailable() from exc
+
+
+@router.get("/rejections/{file_id}", response_model=RejectedArtifactItem)
+async def get_rejection(
+    file_id: UUID, session: Session, service: RejectionServiceDep
+) -> RejectedArtifactItem:
+    try:
+        return await service.get_artifact(
+            facility_id=session.facility_id, file_id=file_id
+        )
+    except RejectionNotFoundError as exc:
+        raise _not_found() from exc
+    except RejectionUnavailableError as exc:
+        raise _unavailable() from exc
+
+
+@router.get("/rejections/{file_id}/download", response_model=RejectedArtifactDownload)
+async def download_rejection_artifact(
     file_id: UUID,
     session: Session,
-    repository: IngestionRepositoryDep,
-    storage: StorageDep,
+    service: RejectionServiceDep,
+    redirect: Annotated[bool, Query()] = False,
+) -> RejectedArtifactDownload | RedirectResponse:
+    try:
+        result = await service.download_artifact(
+            facility_id=session.facility_id, file_id=file_id
+        )
+    except RejectionNotFoundError as exc:
+        raise _not_found() from exc
+    except RejectionExpiredError as exc:
+        raise _expired() from exc
+    except RejectionUnavailableError as exc:
+        raise _unavailable() from exc
+    if redirect:
+        return RedirectResponse(result.download_url, status_code=status.HTTP_302_FOUND)
+    return result
+
+
+@router.get(
+    "/files/{file_id}/rejections",
+    response_model=RejectionDownloadResponse,
+)
+async def download_rejections(
+    file_id: UUID, session: Session, service: RejectionServiceDep
 ) -> RejectionDownloadResponse:
-    row = await repository.get_for_facility(file_id, session.facility_id)
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+    try:
+        result = await service.download_artifact(
+            facility_id=session.facility_id, file_id=file_id
         )
-    key = getattr(row, "rejection_artifact_key", None)
-    if key is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No rejection artifact"
-        )
-    expires_at = getattr(row, "rejection_artifact_expires_at", None)
-    if expires_at is not None and now_vietnam() > expires_at:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE, detail="Rejection artifact expired"
-        )
-    ttl = presigned_get_ttl_from_env()
-    url = storage.presign_get(key, ttl_seconds=ttl, download_filename=row.filename)
+    except RejectionNotFoundError as exc:
+        raise _not_found() from exc
+    except RejectionExpiredError as exc:
+        raise _expired() from exc
+    except RejectionUnavailableError as exc:
+        raise _unavailable() from exc
     return RejectionDownloadResponse(
-        url=url, expires_in_seconds=ttl, filename=row.filename or f"{file_id}.xlsx"
+        url=result.download_url,
+        expires_in_seconds=max(
+            0, int((result.url_expires_at - now_vietnam()).total_seconds())
+        ),
+        filename=result.artifact_filename,
     )
 
 

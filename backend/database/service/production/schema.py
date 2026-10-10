@@ -9,9 +9,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Identity,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -36,10 +39,11 @@ class Demographic(Base):
             "date_trunc('second', ngay_kham) = ngay_kham",
             name="demographic_whole_second",
         ),
+        Index("demographic_source_file_idx", "source_file_id"),
         {"schema": "Diabetes"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     cccd: Mapped[str] = mapped_column(Text, nullable=False)
     ngay_kham: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -82,10 +86,11 @@ class Measurement(Base):
             "date_trunc('second', ngay_kham) = ngay_kham",
             name="measurement_whole_second",
         ),
+        Index("measurement_source_file_idx", "source_file_id"),
         {"schema": "Diabetes"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     facility_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     cccd: Mapped[str] = mapped_column(Text, nullable=False)
     ngay_kham: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -136,20 +141,21 @@ class ReviewRecord(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source_file_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    source_filename: Mapped[str] = mapped_column(Text, nullable=False)
     source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
     disposition: Mapped[str] = mapped_column(Text, nullable=False)
     duplicate_role: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default="NONE"
+        Text, nullable=False, server_default=text("'NONE'")
     )
     merged_into_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
     group_row_numbers: Mapped[list[int]] = mapped_column(
-        JSONB, nullable=False, server_default="[]"
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     issue_codes: Mapped[list[str]] = mapped_column(
-        JSONB, nullable=False, server_default="[]"
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default="now()"
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
 
