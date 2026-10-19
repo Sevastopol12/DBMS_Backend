@@ -142,7 +142,6 @@ class IngestionRepository:
         size_bytes: int,
         mappings: dict[str, object] | None,
     ) -> FileInfo | None:
-        """Set status=QUEUED and queued_at=now (CONTRACTS §4)."""
         try:
             now = now_vietnam()
             values = {
@@ -209,7 +208,7 @@ class IngestionRepository:
     async def recover_processing(
         self, *, processing_timeout: timedelta = timedelta(minutes=15)
     ) -> list[UUID]:
-        """Reclaim stale PROCESSING rows → QUEUED, set queued_at=now (CONTRACTS §4)."""
+        """Reclaim stale PROCESSING rows → QUEUED, set queued_at=now."""
         now = now_vietnam()
         stale_before = now - processing_timeout
         async with self._session.begin() as session:
@@ -236,14 +235,13 @@ class IngestionRepository:
         statuses: Sequence[str] | None = None,
         allow_rejected: bool = False,
     ) -> RequeueResult:
-        """Atomically requeue files to QUEUED (CONTRACTS §4).
+        """Atomically requeue files to QUEUED.
 
         Rules:
         - At least one of file_ids / statuses else ValueError.
         - statuses may only contain QUEUED, ERROR, SUCCEED, REJECTED else ValueError.
         - Requeueable: ERROR, SUCCEED, plus REJECTED if allow_rejected.
         - Does NOT touch attempt_count, error_code, error_message.
-        - Chunks id lists (1 000 per statement).
         """
         if file_ids is None and statuses is None:
             raise ValueError("At least one of file_ids or statuses must be provided.")
