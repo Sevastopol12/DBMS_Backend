@@ -31,9 +31,7 @@ from backend.database.canonical import (
 class Demographic(Base):
     __tablename__ = "Demographic"
     __table_args__ = (
-        UniqueConstraint(
-            "facility_id", "cccd", "ngay_kham", name="demographic_visit_unique"
-        ),
+        UniqueConstraint("facility_id", "cccd", name="demographic_facility_cccd_unique"),
         CheckConstraint("cccd ~ '^[0-9]{12}$'", name="demographic_cccd_format"),
         CheckConstraint(
             "date_trunc('second', ngay_kham) = ngay_kham",
@@ -72,15 +70,9 @@ class Measurement(Base):
             "facility_id", "cccd", "ngay_kham", name="measurement_visit_unique"
         ),
         ForeignKeyConstraint(
-            ["facility_id", "cccd", "ngay_kham"],
-            [
-                "Diabetes.Demographic.facility_id",
-                "Diabetes.Demographic.cccd",
-                "Diabetes.Demographic.ngay_kham",
-            ],
+            ["facility_id", "cccd"],
+            ["Diabetes.Demographic.facility_id", "Diabetes.Demographic.cccd"],
             name="measurement_demographic_fk",
-            ondelete="CASCADE",
-            onupdate="CASCADE",
         ),
         CheckConstraint(
             "date_trunc('second', ngay_kham) = ngay_kham",
