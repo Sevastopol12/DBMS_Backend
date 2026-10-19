@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.connection import RDBAsyncConnectionConfig
@@ -110,9 +110,9 @@ _DATA_QUALITY_ROW_KEYS = (
     "computed_at",
 )
 _REPORT_COLUMNS = (
-    Demographic.facility_id,
-    Demographic.cccd,
-    Demographic.ngay_kham,
+    Measurement.facility_id,
+    Measurement.cccd,
+    Measurement.ngay_kham,
     Demographic.ho_ten,
     Demographic.nam_sinh,
     Demographic.sdt,
@@ -255,9 +255,10 @@ async def _fetch_report_df(session: AsyncSession) -> pd.DataFrame:
         .select_from(Demographic)
         .join(
             Measurement,
-            (Measurement.facility_id == Demographic.facility_id)
-            & (Measurement.cccd == Demographic.cccd)
-            & (Measurement.ngay_kham == Demographic.ngay_kham),
+            and_(
+                Measurement.facility_id == Demographic.facility_id,
+                Measurement.cccd == Demographic.cccd,
+            ),
         )
     )
     result = await session.execute(statement)
