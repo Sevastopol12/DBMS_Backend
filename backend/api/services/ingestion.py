@@ -62,7 +62,7 @@ class IngestionService:
         )
 
         await self._repository.create(file_info)
-        presigned_url = self._storage.get_presigned_url(
+        presigned_url = self._storage.presign_put(
             object_key=object_key, content_type=file.content_type
         )
 
@@ -105,7 +105,7 @@ class IngestionService:
         )
 
         await self._repository.create(file_info)
-        presigned_url = self._storage.get_presigned_url(
+        presigned_url = self._storage.presign_put(
             object_key=object_key, content_type=data.content_type
         )
 
