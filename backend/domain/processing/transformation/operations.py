@@ -30,14 +30,27 @@ def concat(plan: FieldPlan, row: dict[str, Any]) -> str | None:
     return separator.join(usable) if usable else None
 
 
+_BP_NUMBER = r"[+-]?\d+(?:[.,]\d+)?"
+# Unambiguous pair separators: slash, backslash, pipe, x/X (legacy),
+# plus hyphen, underscore, tilde, semicolon, colon per intake request.
+_BP_SEPARATOR = r"(?:[/\\|_~;:\-]|x|X)"
+
+
 def split_blood_pressure(plan: FieldPlan, row: dict[str, Any]) -> str | None:
     value = _first_usable(_values(plan, row))
     if value is None:
         return None
     text = normalize_text(value)
     match = re.fullmatch(
-        r"\s*([+-]?\d+(?:[.,]\d+)?)\s*[/|xX-]\s*([+-]?\d+(?:[.,]\d+)?)\s*", text or ""
+        rf"\s*({_BP_NUMBER})\s*{_BP_SEPARATOR}\s*({_BP_NUMBER})\s*", text or ""
     )
+    if match is None:
+        # Fallback: comma/dot as pair separator. Restricted to 2-3 digit
+        # integers so a single decimal (e.g. "120.5") is not mis-split;
+        # decimals with an unambiguous separator above are handled first.
+        match = re.fullmatch(
+            r"\s*([+-]?\d{2,3})\s*[,.]\s*([+-]?\d{2,3})\s*", text or ""
+        )
     if not match:
         raise ValueError("blood pressure must contain two slash-separated values")
     role = plan.metadata.get("component") or plan.metadata.get("target_component")

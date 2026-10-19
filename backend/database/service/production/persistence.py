@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select, text, tuple_
+from sqlalchemy import delete, exists, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from backend.database.connection import RDBAsyncConnectionConfig
@@ -178,24 +178,32 @@ class AcceptedDataPersistence:
 
         owned_before = await self._owned_keys(session, req.source_file_id)
 
+        owned_demographic_cccds = await self._owned_demographic_cccds(
+            session, req.source_file_id
+        )
+        earliest_by_cccd: dict[str, tuple[datetime, Mapping[str, Any]]] = {}
+        for cccd, ngay_kham, values in entries:
+            if cccd not in earliest_by_cccd or ngay_kham < earliest_by_cccd[cccd][0]:
+                earliest_by_cccd[cccd] = (ngay_kham, values)
         demographic_rows = [
-            self._demographic_row(req, values) for _, _, values in entries
+            self._demographic_row(req, values) for _, values in earliest_by_cccd.values()
         ]
-        applied_keys = await self._upsert_demographics(session, demographic_rows)
-        applied = len(applied_keys)
+        await self._upsert_demographics(session, demographic_rows)
         attempted = len(entries)
 
-        if applied:
-            measurement_rows = [
-                self._measurement_row(req, values)
-                for _, _, values in entries
-                if (values.get("cccd"), values.get("ngay_kham")) in applied_keys
-            ]
-            await self._upsert_measurements(session, measurement_rows)
+        measurement_rows = [
+            self._measurement_row(req, values) for _, _, values in entries
+        ]
+        applied = await self._upsert_measurements(session, measurement_rows)
 
         run_keys = {(cccd, ngay_kham) for cccd, ngay_kham, _ in entries}
         released = await self._delete_stale(
-            session, req.source_file_id, owned_before, run_keys
+            session,
+            req.source_file_id,
+            owned_before,
+            run_keys,
+            owned_demographic_cccds,
+            set(earliest_by_cccd),
         )
         reviews_written = await self._rewrite_reviews(session, req)
 
@@ -218,7 +226,7 @@ class AcceptedDataPersistence:
         return result
 
     async def release_file(self, source_file_id: UUID) -> int:
-        """Delete rows owned by a file (data cascades, reviews deleted); return count."""
+        """Delete rows owned by a file and unreferenced demographics; return count."""
 
         attempt = 0
         while True:
@@ -240,9 +248,20 @@ class AcceptedDataPersistence:
                             ReviewRecord.source_file_id == source_file_id
                         )
                     )
+                    await session.execute(
+                        delete(Measurement).where(
+                            Measurement.source_file_id == source_file_id
+                        )
+                    )
                     result = await session.execute(
                         delete(Demographic).where(
-                            Demographic.source_file_id == source_file_id
+                            Demographic.source_file_id == source_file_id,
+                            ~exists(
+                                select(Measurement.id).where(
+                                    Measurement.facility_id == Demographic.facility_id,
+                                    Measurement.cccd == Demographic.cccd,
+                                )
+                            ),
                         )
                     )
                     released = int(result.rowcount or 0)
@@ -262,11 +281,19 @@ class AcceptedDataPersistence:
         self, session: Any, source_file_id: UUID
     ) -> set[tuple[str, datetime]]:
         result = await session.execute(
-            select(Demographic.cccd, Demographic.ngay_kham).where(
-                Demographic.source_file_id == source_file_id
+            select(Measurement.cccd, Measurement.ngay_kham).where(
+                Measurement.source_file_id == source_file_id
             )
         )
         return {(row[0], row[1]) for row in result.all()}
+
+    async def _owned_demographic_cccds(
+        self, session: Any, source_file_id: UUID
+    ) -> set[str]:
+        result = await session.execute(
+            select(Demographic.cccd).where(Demographic.source_file_id == source_file_id)
+        )
+        return set(result.scalars().all())
 
     def _demographic_row(
         self, req: PersistRequest, values: Mapping[str, Any]
@@ -296,30 +323,21 @@ class AcceptedDataPersistence:
 
     async def _upsert_demographics(
         self, session: Any, rows: list[dict[str, Any]]
-    ) -> set[tuple[str, datetime]]:
-        applied: set[tuple[str, datetime]] = set()
-
+    ) -> None:
         for chunk in _chunks(rows, _CHUNK_SIZE):
-            update_columns = sorted(set(chunk[0].keys()) - _KEY_COLUMNS)
             stmt = pg_insert(Demographic).values(chunk)
+            update_columns = sorted(set(chunk[0]) - {"facility_id", "cccd"})
             stmt = stmt.on_conflict_do_update(
-                constraint="demographic_visit_unique",
+                constraint="demographic_facility_cccd_unique",
                 set_={column: stmt.excluded[column] for column in update_columns},
-                where=tuple_(
-                    Demographic.source_file_uploaded_at, Demographic.source_file_id
-                )
-                <= tuple_(
-                    stmt.excluded.source_file_uploaded_at,
-                    stmt.excluded.source_file_id,
-                ),
-            ).returning(Demographic.cccd, Demographic.ngay_kham)
-            result = await session.execute(stmt)
-            applied.update((row[0], row[1]) for row in result.all())
-        return applied
+                where=stmt.excluded.ngay_kham < Demographic.ngay_kham,
+            )
+            await session.execute(stmt)
 
     async def _upsert_measurements(
         self, session: Any, rows: list[dict[str, Any]]
-    ) -> None:
+    ) -> int:
+        applied = 0
         for chunk in _chunks(rows, _CHUNK_SIZE):
             update_columns = sorted(set(chunk[0].keys()) - _KEY_COLUMNS)
             stmt = pg_insert(Measurement).values(chunk)
@@ -333,8 +351,10 @@ class AcceptedDataPersistence:
                     stmt.excluded.source_file_uploaded_at,
                     stmt.excluded.source_file_id,
                 ),
-            )
-            await session.execute(stmt)
+            ).returning(Measurement.cccd)
+            result = await session.execute(stmt)
+            applied += len(result.all())
+        return applied
 
     async def _delete_stale(
         self,
@@ -342,19 +362,33 @@ class AcceptedDataPersistence:
         source_file_id: UUID,
         owned_before: set[tuple[str, datetime]],
         run_keys: set[tuple[str, datetime]],
+        owned_demographic_cccds: set[str],
+        run_cccds: set[str],
     ) -> int:
         stale = sorted(owned_before - run_keys)
-        if not stale:
-            return 0
         released = 0
         for chunk in _chunks(stale, _CHUNK_SIZE):
             result = await session.execute(
-                delete(Demographic).where(
-                    Demographic.source_file_id == source_file_id,
-                    tuple_(Demographic.cccd, Demographic.ngay_kham).in_(chunk),
+                delete(Measurement).where(
+                    Measurement.source_file_id == source_file_id,
+                    tuple_(Measurement.cccd, Measurement.ngay_kham).in_(chunk),
                 )
             )
             released += int(result.rowcount or 0)
+        stale_cccds = sorted(owned_demographic_cccds - run_cccds)
+        for chunk in _chunks(stale_cccds, _CHUNK_SIZE):
+            result = await session.execute(
+                delete(Demographic).where(
+                    Demographic.source_file_id == source_file_id,
+                    Demographic.cccd.in_(chunk),
+                    ~exists(
+                        select(Measurement.id).where(
+                            Measurement.facility_id == Demographic.facility_id,
+                            Measurement.cccd == Demographic.cccd,
+                        )
+                    ),
+                )
+            )
         return released
 
     async def _rewrite_reviews(self, session: Any, req: PersistRequest) -> int:
