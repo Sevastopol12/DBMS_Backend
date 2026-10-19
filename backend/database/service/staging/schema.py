@@ -65,7 +65,6 @@ class FileInfo(Base):
     accepted_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    # WP-06 lineage/artifact columns (migration 011)
     parent_file_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True
     )
@@ -77,10 +76,6 @@ class FileInfo(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Migration 014: artifact lifecycle timestamps (no backfill).
-    # artifact_created_at records when the rejection object was written;
-    # artifact_purged_at records when the purge task deleted the object.
-    # The key/expires columns are retained after purge for audit.
     artifact_created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -88,7 +83,6 @@ class FileInfo(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Wave 1A additions (CONTRACTS §3)
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )

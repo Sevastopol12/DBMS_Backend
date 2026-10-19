@@ -336,7 +336,7 @@ class FileAcceptancePolicy(BaseModel):
     is determined by ``ACCEPTANCE_FIELDS`` in the engine.
     """
 
-    min_mapping_coverage: float = 0.5
+    min_mapping_coverage: float = 0.0
     required_fields: tuple[str, ...] = ACCEPTANCE_FIELDS
     validation: ValidationPolicy = Field(default_factory=ValidationPolicy)
 
