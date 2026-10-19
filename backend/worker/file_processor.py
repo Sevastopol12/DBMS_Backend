@@ -45,9 +45,9 @@ def max_source_rows_from_env() -> int:
     """Data-row limit for one file (A-3); ``0`` means unlimited."""
 
     try:
-        return int(os.getenv("MAX_SOURCE_ROWS", "50000"))
+        return int(os.getenv("MAX_SOURCE_ROWS", "1000"))
     except ValueError:
-        return 50000
+        return 1000
 
 
 class FileProcessor:
