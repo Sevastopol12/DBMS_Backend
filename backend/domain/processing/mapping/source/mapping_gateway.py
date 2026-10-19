@@ -48,7 +48,7 @@ class MappingLookupGateway:
         dynamic_key: str,
         clock: Callable[[], float] = time.monotonic,
         cooldown_seconds: float = 10.0,
-        db_timeout_seconds: float = 5.0,
+        db_timeout_seconds: float = 30.0,
         redis_max_workers: int = 8,
         still_down_log_seconds: float = 60.0,
         redis_host: str | None = None,

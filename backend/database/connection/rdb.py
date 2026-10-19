@@ -98,7 +98,7 @@ def create_connection(
 
 
 async def probe_connection(
-    config: RDBAsyncConnectionConfig, *, timeout: float = 10.0
+    config: RDBAsyncConnectionConfig, *, timeout: float = 60.0
 ) -> None:
     async def _probe() -> None:
         async with config.async_engine.connect() as connection:

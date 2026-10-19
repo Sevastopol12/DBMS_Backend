@@ -179,7 +179,7 @@ class OpsService:
                 await connection.execute(text("SELECT 1"))
 
         try:
-            await asyncio.wait_for(probe(), timeout=2.0)
+            await asyncio.wait_for(probe(), timeout=20.0)
         except Exception as exc:  # noqa: BLE001 - resilience boundary: health probe fails open
             logger.warning(
                 "ops database health check failed error=%s", type(exc).__name__
@@ -190,7 +190,7 @@ class OpsService:
     async def _probe_redis(self) -> bool:
         try:
             await asyncio.wait_for(
-                asyncio.to_thread(self.resources.redis.ping), timeout=2.0
+                asyncio.to_thread(self.resources.redis.ping), timeout=20.0
             )
         except Exception as exc:  # noqa: BLE001 - resilience boundary: health probe fails open
             logger.warning("ops redis health check failed error=%s", type(exc).__name__)
