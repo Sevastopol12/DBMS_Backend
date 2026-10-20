@@ -84,11 +84,17 @@ class StorageService:
             raise StorageUnavailable() from exc
 
     async def get_file_metadata(self, obj_key: str) -> dict[str, Any]:
-        return await to_thread(
-            self.connection_config.client.head_object,
-            Bucket=self.connection_config.bucket,
-            Key=obj_key,
-        )
+        try:
+            return await to_thread(
+                self.connection_config.client.head_object,
+                Bucket=self.connection_config.bucket,
+                Key=obj_key,
+            )
+        except ClientError as exc:
+            error_code = exc.response["Error"]["Code"]
+            if error_code == "NoSuchKey":
+                raise FileObjectNotFound()
+            raise StorageUnavailable() from exc
 
     def exists(self, key: str) -> bool:
         """Return whether an object exists using a synchronous S3 HEAD."""
@@ -110,10 +116,12 @@ class StorageService:
         except (BotoCoreError, NoCredentialsError) as exc:
             raise StorageUnavailable() from exc
 
-    def get(self, obj_key: str) -> bytes | None:
+    async def get(self, obj_key: str) -> bytes | None:
         try:
-            response = self.connection_config.client.get_object(
-                Bucket=self.connection_config.bucket, Key=obj_key
+            response = await to_thread(
+                self.connection_config.client.get_object,
+                Bucket=self.connection_config.bucket,
+                Key=obj_key,
             )
 
             if response["ContentLength"] == 0:

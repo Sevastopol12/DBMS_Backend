@@ -85,7 +85,7 @@ class FileProcessor:
             )
 
             try:
-                file_bytes = self._storage.get(object_key)
+                file_bytes = await self._storage.get(object_key)
                 if file_bytes is None:
                     await self._reject_input(file_id, error_codes.EMPTY_INPUT)
                     return
