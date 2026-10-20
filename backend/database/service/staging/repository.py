@@ -7,14 +7,9 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.exc import IntegrityError
 
 from backend.database.base import Base
 from backend.database.connection import RDBAsyncConnectionConfig
-from backend.database.errors import (
-    DuplicatedContentError,
-    is_duplicate_content_integrity_error,
-)
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
 from backend.timezone import now_vietnam
@@ -116,7 +111,7 @@ class IngestionRepository:
     async def create(self, file: FileInfo) -> FileInfo | None:
         async with self._session.begin() as session:
             session.add(file)
-            return file
+        return file
 
     async def get(self, file_id: UUID) -> FileInfo | None:
         async with self._session.begin() as session:
@@ -132,41 +127,6 @@ class IngestionRepository:
             )
 
             return result.scalar_one_or_none()
-
-    # Upload lifecycle
-
-    async def complete_upload(
-        self,
-        file_id: UUID,
-        content_hash: str,
-        size_bytes: int,
-        mappings: dict[str, object] | None,
-    ) -> FileInfo | None:
-        try:
-            now = now_vietnam()
-            values = {
-                "content_hash": content_hash,
-                "size_bytes": size_bytes,
-                "status": FileStatus.QUEUED,
-                "mappings": mappings,
-                "uploaded_at": now,
-                "queued_at": now,
-                "error_code": None,
-                "error_message": None,
-            }
-            async with self._session.begin() as session:
-                result = await session.execute(
-                    update(FileInfo)
-                    .where(FileInfo.id == file_id)
-                    .values(**values)
-                    .returning(FileInfo)
-                )
-                return result.scalar_one_or_none()
-
-        except IntegrityError as exc:
-            if is_duplicate_content_integrity_error(exc):
-                raise DuplicatedContentError
-            raise
 
     async def claim(
         self,
@@ -495,9 +455,7 @@ class IngestionRepository:
             d["quality_report"] = row.quality_report
             return d
 
-    #
-    # Rejection artifact + facility-scoped lineage (WP-06, migration 011)
-    #
+    # Rejection artifact + facility-scoped lineage
 
     async def set_artifact(
         self,

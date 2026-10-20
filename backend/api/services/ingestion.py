@@ -1,12 +1,12 @@
 from uuid import UUID, uuid4
 
 from backend.api.data_objects.ingestion import (
-    IngestionComplete,
-    IngestionCreate,
-    IngestionResponse,
-    UploadReportCreate,
+    CompleteUploadCreate,
+    CompleteUploadResponse,
+    RequestPresignedCreate,
+    RequestPresignedResponse,
     _get_safe_filename,
-    _serialize_ingestion,
+    _serialize_complete_response,
 )
 from backend.database.service import IngestionRepository, StorageService
 from backend.database.service.staging.schema import FileInfo
@@ -39,8 +39,8 @@ class IngestionService:
         self._storage = storage_service
 
     async def get_upload(
-        self, file: IngestionCreate, *, facility_id: UUID
-    ) -> IngestionResponse:
+        self, file: RequestPresignedCreate, *, facility_id: UUID
+    ) -> RequestPresignedResponse:
         if file.content_type not in SUPPORTED_CONTENT_TYPES:
             raise ValueError(
                 f"Unsupported format {file.content_type} - {file.filename}"
@@ -49,107 +49,53 @@ class IngestionService:
         file_id: UUID = uuid4()
         filename = _get_safe_filename(file.filename)
         created_at = now_vietnam()
-        object_key: str = f"{created_at:%Y_%m_%d}/{file_id}/{filename}"
+        object_key: str = f"{facility_id}/{created_at:%Y_%m_%d}/{file_id}/{filename}"
 
-        file_info = FileInfo(
-            id=file_id,
-            facility_id=facility_id,
-            filename=filename,
+        presigned_url = self._storage.presign_put(
             object_key=object_key,
             content_type=file.content_type,
-            status=FileStatus.CREATED,
-            created_at=created_at,
+            base64_hashed_digest=file.base64_hashed_digest,
         )
 
-        await self._repository.create(file_info)
-        presigned_url = self._storage.presign_put(
-            object_key=object_key, content_type=file.content_type
-        )
-
-        return _serialize_ingestion(file_info, presigned_url)
-
-    async def create_upload_report(
-        self, data: UploadReportCreate, *, facility_id: UUID
-    ) -> IngestionResponse:
-        if data.content_type != XLSX_CONTENT_TYPE:
-            raise ValueError(f"upload_report only supports XLSX - {data.filename}")
-
-        parent = await self._repository.get_for_facility(
-            data.parent_file_id, facility_id
-        )
-        if parent is None:
-            raise ParentNotFoundError(str(data.parent_file_id))
-
-        artifact_key = getattr(parent, "rejection_artifact_key", None)
-        artifact_expires = getattr(parent, "rejection_artifact_expires_at", None)
-        if artifact_key is None:
-            raise ParentNotFoundError(str(data.parent_file_id))
-        if artifact_expires is not None and now_vietnam() > artifact_expires:
-            raise ParentArtifactExpiredError(str(data.parent_file_id))
-
-        file_id: UUID = uuid4()
-        filename = _get_safe_filename(data.filename)
-        created_at = now_vietnam()
-        object_key: str = f"{created_at:%Y_%m_%d}/{file_id}/{filename}"
-
-        file_info = FileInfo(
-            id=file_id,
-            facility_id=facility_id,
-            filename=filename,
+        return RequestPresignedResponse(
+            file_id=file_id,
             object_key=object_key,
-            content_type=data.content_type,
-            status=FileStatus.CREATED,
-            created_at=created_at,
-            parent_file_id=parent.id,
-            mappings=getattr(parent, "mappings", None),
+            presigned_url=presigned_url,
         )
-
-        await self._repository.create(file_info)
-        presigned_url = self._storage.presign_put(
-            object_key=object_key, content_type=data.content_type
-        )
-
-        return _serialize_ingestion(file_info, presigned_url)
 
     async def complete_upload(
         self,
-        data: IngestionComplete,
+        completion_request: CompleteUploadCreate,
         *,
         facility_id: UUID,
-    ) -> IngestionResponse | None:
-        try:
-            file = await self._repository.get_for_facility(data.id, facility_id)
+    ) -> CompleteUploadResponse | None:
+        complete_object_key = f"{facility_id}/{completion_request.created_at}/{completion_request.object_key}"
 
-            if file is None:
-                return None
+        file_metadata = await self._storage.get_file_metadata(complete_object_key)
 
-            if file.status in {FileStatus.QUEUED, FileStatus.PROCESSING}:
-                return _serialize_ingestion(file)
-
-            file_metadata = await self._storage.get_file_metadata(file.object_key)
-
-            if data.size_bytes != int(file_metadata.get("ContentLength", 0)):
-                raise ValueError(
-                    "Uploaded object size does not match the completion request"
-                )
-
-            complete = await self._repository.complete_upload(
-                data.id, data.content_hash, data.size_bytes, data.mappings
+        if completion_request.size_bytes != int(file_metadata.get("ContentLength", 0)):
+            raise ValueError(
+                "Uploaded object size does not match the completion request"
             )
+        now = now_vietnam()
 
-            return _serialize_ingestion(complete) if complete else None
+        file_info = FileInfo(
+            id=completion_request.file_id,
+            facility_id=facility_id,
+            filename=completion_request.filename,
+            object_key=complete_object_key,
+            content_type=completion_request.content_type,
+            size_bytes=completion_request.size_bytes,
+            mappings=completion_request.mappings,
+            status=FileStatus.CREATED,
+            created_at=now,
+            error_code=None,
+            error_message=None,
+        )
 
-        except Exception:
-            await self._repository.update(
-                data.id,
-                {
-                    "status": FileStatus.ERROR,
-                    "error_code": "INTERNAL_ERROR",
-                    "error_message": "Upload completion failed",
-                    "last_error_at": now_vietnam(),
-                },
-            )
-            raise
+        complete = await self._repository.create(file_info)
+
+        return _serialize_complete_response(complete) if complete else None
 
 
 __all__ = [
