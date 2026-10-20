@@ -68,17 +68,20 @@ class StorageService:
     def __init__(self, config: StorageAsyncConnectionConfig):
         self.connection_config = config
 
-    def presign_put(self, object_key: str, content_type: str) -> str:
+    def presign_put(
+        self, object_key: str, content_type: str, base64_hashed_digest: str
+    ) -> str:
         try:
             return self.connection_config.client.generate_presigned_url(
                 ClientMethod="put_object",
-                ExpiresIn=60,
-                Params={
-                    "Bucket": self.connection_config.bucket,
-                    "Key": object_key,
-                    "ContentType": content_type,
-                },
                 HttpMethod="PUT",
+                Params={
+                    "ChecksumSHA256": base64_hashed_digest,
+                    "Bucket": self.connection_config.bucket,
+                    "ContentType": content_type,
+                    "Key": object_key,
+                },
+                ExpiresIn=60,
             )
         except (ClientError, BotoCoreError, NoCredentialsError) as exc:
             raise StorageUnavailable() from exc
@@ -92,8 +95,8 @@ class StorageService:
             )
         except ClientError as exc:
             error_code = exc.response["Error"]["Code"]
-            if error_code == "NoSuchKey":
-                raise FileObjectNotFound()
+            if error_code in {"NoSuchKey", "NotFound"}:
+                raise FileObjectNotFound() from exc
             raise StorageUnavailable() from exc
 
     def exists(self, key: str) -> bool:
