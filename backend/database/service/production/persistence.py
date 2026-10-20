@@ -186,7 +186,8 @@ class AcceptedDataPersistence:
             if cccd not in earliest_by_cccd or ngay_kham < earliest_by_cccd[cccd][0]:
                 earliest_by_cccd[cccd] = (ngay_kham, values)
         demographic_rows = [
-            self._demographic_row(req, values) for _, values in earliest_by_cccd.values()
+            self._demographic_row(req, values)
+            for _, values in earliest_by_cccd.values()
         ]
         await self._upsert_demographics(session, demographic_rows)
         attempted = len(entries)
