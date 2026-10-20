@@ -31,7 +31,9 @@ from backend.database.canonical import (
 class Demographic(Base):
     __tablename__ = "Demographic"
     __table_args__ = (
-        UniqueConstraint("facility_id", "cccd", name="demographic_facility_cccd_unique"),
+        UniqueConstraint(
+            "facility_id", "cccd", name="demographic_facility_cccd_unique"
+        ),
         CheckConstraint("cccd ~ '^[0-9]{12}$'", name="demographic_cccd_format"),
         CheckConstraint(
             "date_trunc('second', ngay_kham) = ngay_kham",
