@@ -32,6 +32,7 @@ class CompleteUploadCreate(BaseModel):
     content_type: str
     created_at: str
 
+
 class RequestPresignedResponse(BaseModel):
     file_id: UUID
     presigned_url: str
