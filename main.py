@@ -15,7 +15,6 @@ from backend.logging_config import configure_logging
 configure_logging("api")
 app = FastAPI(lifespan=api_lifespan)
 
-
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth/v1")
 app.include_router(
