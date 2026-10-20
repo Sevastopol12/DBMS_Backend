@@ -1,5 +1,4 @@
 from pathlib import PurePath
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -7,22 +6,6 @@ from pydantic import BaseModel, ConfigDict
 from backend.api.data_objects.common import ApiDateTime
 from backend.database.service.staging.schema import FileInfo
 from backend.domain.processing.models import FileStatus
-
-
-class IngestionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    filename: str
-    content_type: str
-
-
-class IngestionComplete(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: UUID
-    content_hash: str
-    size_bytes: int | None = None
-    mappings: dict[str, Any] | None = None
 
 
 class UploadReportCreate(BaseModel):
@@ -33,25 +16,35 @@ class UploadReportCreate(BaseModel):
     content_type: str
 
 
-class IngestionResponse(BaseModel):
-    id: UUID
-    facility_id: UUID
+class RequestPresignedCreate(BaseModel):
+    filename: str
+    content_type: str
+    base64_hashed_digest: str
+
+
+class CompleteUploadCreate(BaseModel):
+    file_id: UUID
+    filename: str
+    size_bytes: int
+    mappings: dict[str, str] | None = None
+
+    object_key: str
+    content_type: str
+    created_at: str
+
+class RequestPresignedResponse(BaseModel):
+    file_id: UUID
+    object_key: str
+    presigned_url: str
+
+
+class CompleteUploadResponse(BaseModel):
+    file_id: UUID
     filename: str | None = None
     object_key: str
     status: FileStatus
-
-    presigned_url: str | None = None
-
     error_code: str | None = None
     error_message: str | None = None
-    accepted_row_count: int = 0
-    rejected_row_count: int = 0
-    ignored_duplicate_row_count: int = 0
-
-    parent_file_id: UUID | None = None
-    rejection_report_available: bool = False
-    rejection_report_expires_at: ApiDateTime | None = None
-
     created_at: ApiDateTime
 
 
@@ -84,25 +77,12 @@ def _get_safe_filename(filename: str) -> str:
     )
 
 
-def _serialize_ingestion(
-    file: FileInfo, presigned_url: str | None = None
-) -> IngestionResponse:
-    artifact_key = getattr(file, "rejection_artifact_key", None)
-    artifact_expires = getattr(file, "rejection_artifact_expires_at", None)
-    return IngestionResponse(
-        id=file.id,
-        facility_id=file.facility_id,
+def _serialize_complete_response(file: FileInfo) -> CompleteUploadResponse:
+    return CompleteUploadResponse(
+        file_id=file.id,
         filename=file.filename,
         object_key=file.object_key,
         status=file.status,
-        presigned_url=presigned_url,
-        accepted_row_count=file.accepted_row_count or 0,
-        rejected_row_count=file.rejected_row_count or 0,
-        ignored_duplicate_row_count=getattr(file, "ignored_duplicate_row_count", 0)
-        or 0,
-        parent_file_id=getattr(file, "parent_file_id", None),
-        rejection_report_available=artifact_key is not None,
-        rejection_report_expires_at=artifact_expires,
         error_code=file.error_code,
         error_message=file.error_message,
         created_at=file.created_at,
@@ -122,8 +102,7 @@ def _serialize_file_detail(file: FileInfo) -> FileDetailResponse:
         error_message=file.error_message,
         accepted_row_count=file.accepted_row_count or 0,
         rejected_row_count=file.rejected_row_count or 0,
-        ignored_duplicate_row_count=getattr(file, "ignored_duplicate_row_count", 0)
-        or 0,
+        ignored_duplicate_row_count=getattr(file, "ignored_duplicate_row_count", 0),
         parent_file_id=getattr(file, "parent_file_id", None),
         rejection_report_available=artifact_key is not None,
         rejection_report_expires_at=artifact_expires,
@@ -134,12 +113,16 @@ def _serialize_file_detail(file: FileInfo) -> FileDetailResponse:
 
 
 __all__ = [
+    "CompleteUploadCreate",
+    "CompleteUploadResponse",
     "FileDetailResponse",
     "IngestionComplete",
     "IngestionCreate",
     "IngestionResponse",
+    "RequestPresignedCreate",
+    "RequestPresignedResponse",
     "UploadReportCreate",
     "_get_safe_filename",
+    "_serialize_complete_response",
     "_serialize_file_detail",
-    "_serialize_ingestion",
 ]

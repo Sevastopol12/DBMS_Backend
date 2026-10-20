@@ -2,10 +2,6 @@ class DatabaseServiceError(Exception):
     pass
 
 
-class DuplicatedContentError(DatabaseServiceError):
-    pass
-
-
 class FileObjectNotFound(DatabaseServiceError):
     pass
 
@@ -26,17 +22,7 @@ class MetricsDataIntegrityError(DatabaseServiceError):
     """Persisted metric rows failed DTO validation (data-quality problem)."""
 
 
-CONTENT_HASH_UNIQUE_CONSTRAINT = "ingestion_files_facility_hash_unique"
 COMPUTATION_RUN_SINGLE_RUNNING_INDEX = "computation_run_log_single_running"
-
-
-def is_duplicate_content_integrity_error(error: BaseException) -> bool:
-    """Identify the declared content-hash constraint without parsing messages."""
-    original = getattr(error, "orig", error)
-    diagnostics = getattr(original, "diag", None)
-    return (
-        getattr(diagnostics, "constraint_name", None) == CONTENT_HASH_UNIQUE_CONSTRAINT
-    )
 
 
 def is_run_in_progress_integrity_error(error: BaseException) -> bool:
@@ -52,12 +38,10 @@ def is_run_in_progress_integrity_error(error: BaseException) -> bool:
 __all__ = [
     "COMPUTATION_RUN_SINGLE_RUNNING_INDEX",
     "CONTENT_HASH_UNIQUE_CONSTRAINT",
-    "DuplicatedContentError",
     "FileObjectNotFound",
     "MetricsDataIntegrityError",
     "MetricsRunInProgress",
     "MetricsStoreUnavailable",
     "StorageUnavailable",
-    "is_duplicate_content_integrity_error",
     "is_run_in_progress_integrity_error",
 ]
