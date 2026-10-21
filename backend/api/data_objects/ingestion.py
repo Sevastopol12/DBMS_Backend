@@ -45,7 +45,7 @@ class CompleteUploadResponse(BaseModel):
     status: FileStatus
     error_code: str | None = None
     error_message: str | None = None
-    created_at: ApiDateTime
+    queued_at: ApiDateTime
 
 
 class FileDetailResponse(BaseModel):
@@ -62,7 +62,7 @@ class FileDetailResponse(BaseModel):
     parent_file_id: UUID | None = None
     rejection_report_available: bool = False
     rejection_report_expires_at: ApiDateTime | None = None
-    created_at: ApiDateTime | None = None
+    queued_at: ApiDateTime | None = None
     uploaded_at: ApiDateTime | None = None
     completed_at: ApiDateTime | None = None
 
@@ -85,7 +85,7 @@ def _serialize_complete_response(file: FileInfo) -> CompleteUploadResponse:
         status=file.status,
         error_code=file.error_code,
         error_message=file.error_message,
-        created_at=file.created_at,
+        queued_at=file.queued_at,
     )
 
 
@@ -106,7 +106,7 @@ def _serialize_file_detail(file: FileInfo) -> FileDetailResponse:
         parent_file_id=getattr(file, "parent_file_id", None),
         rejection_report_available=artifact_key is not None,
         rejection_report_expires_at=artifact_expires,
-        created_at=file.created_at,
+        queued_at=file.queued_at,
         uploaded_at=getattr(file, "uploaded_at", None),
         completed_at=getattr(file, "completed_at", None),
     )

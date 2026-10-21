@@ -109,7 +109,6 @@ class SourceDataset(BaseModel):
 
 
 class FileStatus(str, Enum):
-    CREATED = "CREATED"
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     SUCCEED = "SUCCEED"

@@ -85,10 +85,10 @@ def _to_rejection_record(row: FileInfo) -> RejectedArtifactRecord:
 
 
 def _artifact_order_expr():
-    """Effective artifact creation time, falling back to file creation."""
+    """Effective artifact creation time, falling back to queue admission."""
     return func.coalesce(
         FileInfo.artifact_created_at,
-        FileInfo.created_at,
+        FileInfo.queued_at,
     )
 
 
@@ -247,8 +247,6 @@ class IngestionRepository:
                     result.already_queued.append(fid)
                 elif status == FileStatus.PROCESSING:
                     result.skipped[fid] = "PROCESSING"
-                elif status == FileStatus.CREATED:
-                    result.skipped[fid] = "CREATED"
                 elif status == FileStatus.REJECTED and not allow_rejected:
                     result.skipped[fid] = "REJECTED_REQUIRES_FORCE"
                 elif status in requeueable:
@@ -433,7 +431,7 @@ class IngestionRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
-        stmt = select(FileInfo).order_by(FileInfo.created_at.desc())
+        stmt = select(FileInfo).order_by(FileInfo.queued_at.desc())
         if status is not None:
             stmt = stmt.where(FileInfo.status == status)
         if error_code is not None:
@@ -594,8 +592,9 @@ class IngestionRepository:
     ) -> list[RejectedArtifactRecord]:
         """List artifact records of one facility, newest first (keyset).
 
-        Order is (created_at DESC, file_id DESC) where created_at is the
-        effective artifact creation time. ``after`` is the last record of
+        Order is (queued_at DESC, file_id DESC) where the sort key is the
+        effective artifact creation time (artifact_created_at, else queued_at).
+        ``after`` is the last record of
         the previous page; fetching ``limit + 1`` is the caller's job.
         """
         order_expr = _artifact_order_expr()
@@ -655,7 +654,7 @@ class IngestionRepository:
         stmt = (
             select(FileInfo)
             .where(FileInfo.facility_id == facility_id)
-            .order_by(FileInfo.created_at.desc())
+            .order_by(FileInfo.queued_at.desc())
         )
         if status is not None:
             stmt = stmt.where(FileInfo.status == status)
@@ -692,7 +691,6 @@ def _file_to_dict(row: FileInfo) -> dict:
         "error_code": row.error_code,
         "error_message": row.error_message,
         "attempt_count": row.attempt_count,
-        "created_at": row.created_at,
         "queued_at": row.queued_at,
         "started_at": row.started_at,
         "completed_at": row.completed_at,

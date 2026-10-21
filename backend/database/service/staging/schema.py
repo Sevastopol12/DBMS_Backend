@@ -16,9 +16,9 @@ class FileInfo(Base):
     __table_args__ = (
         Index("ingestion_files_status_idx", "status"),
         Index(
-            "ingestion_files_facility_created_idx",
+            "ingestion_files_facility_queued_idx",
             "facility_id",
-            text("created_at DESC"),
+            text("queued_at DESC"),
         ),
         {"schema": "Files"},
     )
@@ -31,18 +31,14 @@ class FileInfo(Base):
 
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, default=FileStatus.CREATED
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default=FileStatus.QUEUED)
 
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=False)
     mappings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     quality_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        default=now_vietnam,
+    queued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=now_vietnam
     )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -75,9 +71,6 @@ class FileInfo(Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     last_error_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    queued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
