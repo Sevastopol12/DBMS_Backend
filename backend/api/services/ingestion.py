@@ -48,8 +48,8 @@ class IngestionService:
 
         file_id: UUID = uuid4()
         filename = _get_safe_filename(file.filename)
-        created_at = now_vietnam()
-        object_key: str = f"{facility_id}/{created_at:%Y_%m_%d}/{file_id}/{filename}"
+        now = now_vietnam()
+        object_key: str = f"{facility_id}/{now:%Y_%m_%d}/{file_id}/{filename}"
 
         presigned_url = self._storage.presign_put(
             object_key=object_key,
@@ -87,8 +87,8 @@ class IngestionService:
             content_type=completion_request.content_type,
             size_bytes=completion_request.size_bytes,
             mappings=completion_request.mappings,
-            status=FileStatus.CREATED,
-            created_at=now,
+            status=FileStatus.QUEUED,
+            queued_at=now,
             error_code=None,
             error_message=None,
         )
