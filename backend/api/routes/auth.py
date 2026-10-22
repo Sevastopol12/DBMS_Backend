@@ -48,8 +48,7 @@ async def login(
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> LoginResponse:
     try:
-        result = await service.login(req.username, req.password, ip)
-        return LoginResponse(**result)
+        return await service.login(req.username, req.password, ip)
     except RateLimitExceeded as e:
         headers = {"Retry-After": str(e.retry_after)}
         raise HTTPException(

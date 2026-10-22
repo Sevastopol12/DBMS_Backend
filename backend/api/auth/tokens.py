@@ -1,19 +1,27 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 import jwt
 
 from backend.api.auth.settings import AuthSettings
+from backend.timezone import now_vietnam
 
 
-def create_token(user_id: UUID, sid: str, settings: AuthSettings) -> str:
-    now = datetime.now(UTC)
+def create_token(
+    user_id: UUID,
+    sid: str,
+    settings: AuthSettings,
+    *,
+    expires_at: datetime,
+    issued_at: datetime | None = None,
+) -> str:
+
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "sid": sid,
-        "iat": now,
-        "exp": now + timedelta(seconds=settings.session_ttl_seconds),
+        "iat": issued_at or now_vietnam(),
+        "exp": expires_at,
     }
     if settings.jwt_issuer:
         payload["iss"] = settings.jwt_issuer
