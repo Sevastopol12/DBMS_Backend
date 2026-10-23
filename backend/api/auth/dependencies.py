@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_503_SERVICE_UNAVAILABLE
 
@@ -23,6 +23,14 @@ def get_session_store(
     request: Request, settings: Annotated[AuthSettings, Depends(get_auth_settings)]
 ) -> SessionStore:
     resources: ApiResources = request.app.state.resources
+    return SessionStore(resources.redis, settings)
+
+
+def get_websocket_session_store(
+    websocket: WebSocket,
+    settings: Annotated[AuthSettings, Depends(get_auth_settings)],
+) -> SessionStore:
+    resources: ApiResources = websocket.app.state.resources
     return SessionStore(resources.redis, settings)
 
 

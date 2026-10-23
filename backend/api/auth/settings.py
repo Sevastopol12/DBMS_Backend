@@ -11,7 +11,7 @@ class AuthSettings:
     jwt_audience: str | None = None
     session_ttl_seconds: int = 86400
     access_ttl_seconds: int = 900
-    refresh_ttl_seconds: int = 900
+    refresh_ttl_seconds: int = 1800
     refresh_grace_seconds: int = 10
     ws_expiry_warning_seconds: int = 60
     ws_revalidate_seconds: int = 30
@@ -19,7 +19,7 @@ class AuthSettings:
     login_ip_max_failures: int = 30
     login_window_seconds: int = 900
     trusted_proxy_hops: int = 0
-    max_rotate_attempts: int = 1
+    max_rotate_attempts: int = 3
 
     def __post_init__(self) -> None:
         durations = {
@@ -37,6 +37,8 @@ class AuthSettings:
             )
         if self.access_ttl_seconds > self.session_ttl_seconds:
             raise ValueError("access_ttl_seconds must not exceed session_ttl_seconds")
+        if self.refresh_ttl_seconds <= self.access_ttl_seconds:
+            raise ValueError("refresh_ttl_seconds must exceed access_ttl_seconds")
         if self.ws_expiry_warning_seconds >= self.access_ttl_seconds:
             raise ValueError(
                 "ws_expiry_warning_seconds must be less than access_ttl_seconds"
@@ -52,18 +54,20 @@ class AuthSettings:
 
         return cls(
             jwt_secret=jwt_secret,
-            jwt_algorithm=os.getenv("JWT_ALGORITHM"),
+            jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
             jwt_issuer=os.getenv("JWT_ISSUER"),
             jwt_audience=os.getenv("JWT_AUDIENCE"),
-            session_ttl_seconds=int(os.getenv("AUTH_SESSION_TTL_SECONDS")),
-            access_ttl_seconds=int(os.getenv("AUTH_ACCESS_TTL_SECONDS")),
-            refresh_ttl_seconds=int(os.getenv("AUTH_REFRESH_TTL_SECONDS")),
-            refresh_grace_seconds=int(os.getenv("AUTH_REFRESH_GRACE_SECONDS")),
-            ws_expiry_warning_seconds=int(os.getenv("AUTH_WS_EXPIRY_WARNING_SECONDS")),
-            ws_revalidate_seconds=int(os.getenv("AUTH_WS_REVALIDATE_SECONDS")),
-            login_max_failures=int(os.getenv("AUTH_LOGIN_MAX_FAILURES")),
-            login_ip_max_failures=int(os.getenv("AUTH_LOGIN_IP_MAX_FAILURES")),
-            login_window_seconds=int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS")),
-            trusted_proxy_hops=int(os.getenv("AUTH_TRUSTED_PROXY_HOPS")),
-            max_rotate_attempts=int(os.getennv("MAX_ROTATE_ATTEMPTS")),
+            session_ttl_seconds=int(os.getenv("AUTH_SESSION_TTL_SECONDS", "86400")),
+            access_ttl_seconds=int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")),
+            refresh_ttl_seconds=int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "1800")),
+            refresh_grace_seconds=int(os.getenv("AUTH_REFRESH_GRACE_SECONDS", "10")),
+            ws_expiry_warning_seconds=int(
+                os.getenv("AUTH_WS_EXPIRY_WARNING_SECONDS", "60")
+            ),
+            ws_revalidate_seconds=int(os.getenv("AUTH_WS_REVALIDATE_SECONDS", "30")),
+            login_max_failures=int(os.getenv("AUTH_LOGIN_MAX_FAILURES", "5")),
+            login_ip_max_failures=int(os.getenv("AUTH_LOGIN_IP_MAX_FAILURES", "30")),
+            login_window_seconds=int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "900")),
+            trusted_proxy_hops=int(os.getenv("AUTH_TRUSTED_PROXY_HOPS", "0")),
+            max_rotate_attempts=3,
         )

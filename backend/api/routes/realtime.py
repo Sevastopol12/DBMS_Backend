@@ -9,7 +9,10 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from redis import RedisError
 
-from backend.api.auth.dependencies import get_auth_settings, get_session_store
+from backend.api.auth.dependencies import (
+    get_auth_settings,
+    get_websocket_session_store,
+)
 from backend.api.auth.sessions import (
     AuthUnavailable,
     RefreshInvalid,
@@ -38,7 +41,7 @@ _MAX_FRAME_BYTES = 4096
 async def realtime_ws(
     websocket: WebSocket,
     settings: Annotated[AuthSettings, Depends(get_auth_settings)],
-    session_store: Annotated[SessionStore, Depends(get_session_store)],
+    session_store: Annotated[SessionStore, Depends(get_websocket_session_store)],
 ) -> None:
     await websocket.accept()
     resources: ApiResources = websocket.app.state.resources
