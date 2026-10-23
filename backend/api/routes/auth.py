@@ -69,6 +69,7 @@ async def login(
 
 @router.post("/logout", status_code=HTTP_204_NO_CONTENT)
 async def logout(
+    request: Request,
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     settings: Annotated[AuthSettings, Depends(get_auth_settings)],
     service: Annotated[AuthService, Depends(get_auth_service)],
@@ -97,3 +98,6 @@ async def logout(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service unavailable",
         )
+    hub = getattr(request.app.state, "hub", None)
+    if hub is not None:
+        await hub.disconnect_session(sid)

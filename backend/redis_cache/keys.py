@@ -6,6 +6,7 @@ from uuid import UUID
 
 METRICS_CACHE_TTL_SECONDS = 3000
 LAST_COMPUTED_AT_KEY = "metrics:last_computed_at"
+METRICS_UPDATED_CHANNEL = "metrics:updated"
 PERIOD_SUMMARY_PREFIX = "metrics:period_summary:"
 COMORBIDITY_PREFIX = "metrics:comorbidity:"
 OUT_OF_CONTROL_PREFIX = "metrics:patient_state:out_of_control:"
@@ -94,6 +95,7 @@ __all__ = [
     "LAST_COMPUTED_AT_KEY",
     "METRICS_CACHE_PREFIXES",
     "METRICS_CACHE_TTL_SECONDS",
+    "METRICS_UPDATED_CHANNEL",
     "OUT_OF_CONTROL_PREFIX",
     "PERIOD_SUMMARY_PREFIX",
     "comorbidity_key",

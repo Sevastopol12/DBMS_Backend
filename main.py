@@ -8,6 +8,7 @@ from backend.api.routes import (
     fetch_router,
     health_router,
     metrics_router,
+    realtime_router,
     upload_router,
 )
 from backend.logging_config import configure_logging
@@ -17,6 +18,7 @@ app = FastAPI(lifespan=api_lifespan)
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth/v1")
+app.include_router(realtime_router, prefix="/realtime/v1")
 app.include_router(
     upload_router, prefix="/upload/v1", dependencies=[Depends(require_session)]
 )
