@@ -50,6 +50,17 @@ class MetricsCache:
                 type(exc).__name__,
             )
 
+    def publish(self, channel: str, payload: object) -> None:
+        """Publish a best-effort JSON message to a Redis pub/sub channel."""
+        try:
+            serialized = json.dumps(payload, default=str, allow_nan=False)
+            self.client.publish(channel, serialized)
+        except Exception as exc:  # noqa: BLE001 - pub/sub is best-effort
+            logger.warning(
+                "Redis metrics cache unavailable during publish error=%s",
+                type(exc).__name__,
+            )
+
     def delete_many(self, keys: Iterable[str]) -> None:
         key_list = list(keys)
         if not key_list:

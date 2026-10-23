@@ -26,6 +26,7 @@ from backend.redis_cache.keys import (
     LAST_COMPUTED_AT_KEY,
     METRICS_CACHE_PREFIXES,
     METRICS_CACHE_TTL_SECONDS,
+    METRICS_UPDATED_CHANNEL,
     comorbidity_key,
     data_quality_key,
     out_of_control_key,
@@ -352,7 +353,7 @@ def _write_metrics_cache(
     cache: MetricsCache,
     result: ComputationResult,
     computed_at: datetime,
-) -> None:
+) -> list[str]:
     """Write the complete cache snapshot and best-effort prune stale keys."""
 
     canonical = _canonical_result(result, computed_at)
@@ -407,7 +408,7 @@ def _write_metrics_cache(
     scan_keys = getattr(cache, "scan_keys", None)
     delete_many = getattr(cache, "delete_many", None)
     if not callable(scan_keys) or not callable(delete_many):
-        return
+        return facility_tokens
     written = set(expected)
     for prefix in METRICS_CACHE_PREFIXES:
         try:
@@ -420,6 +421,7 @@ def _write_metrics_cache(
                 prefix,
                 type(exc).__name__,
             )
+    return facility_tokens
 
 
 class ComputeProcessor:
@@ -515,7 +517,24 @@ class ComputeProcessor:
 
         if self._metrics_cache is not None:
             try:
-                _write_metrics_cache(self._metrics_cache, result, run_at)
+                facility_tokens = _write_metrics_cache(
+                    self._metrics_cache, result, run_at
+                )
+                payload_at = run_at.isoformat()
+                for facility_id in facility_tokens:
+                    try:
+                        self._metrics_cache.publish(
+                            METRICS_UPDATED_CHANNEL,
+                            {
+                                "facility_id": facility_id,
+                                "computed_at": payload_at,
+                            },
+                        )
+                    except Exception as exc:  # noqa: BLE001 - notification is best-effort
+                        logger.warning(
+                            "metrics update publish failed error=%s",
+                            type(exc).__name__,
+                        )
             except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
                 logger.warning(
                     "metrics cache write failed run_id=%s error=%s",
