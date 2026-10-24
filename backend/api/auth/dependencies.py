@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, WebSocket
@@ -57,16 +57,11 @@ async def require_session(
         )
 
     try:
-        payload = verify_token(creds.credentials, settings)
+        session, _ = await resolve_session_token(
+            creds.credentials, settings, session_store
+        )
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    sid = payload.get("sid")
-    if not sid:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    try:
-        session = await session_store.get_session(sid)
     except AuthUnavailable:
         raise HTTPException(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -79,3 +74,20 @@ async def require_session(
         )
 
     return session
+
+
+async def resolve_session_token(
+    token: str, settings: AuthSettings, session_store: SessionStore
+) -> tuple[AuthSession, dict[str, Any]]:
+    """Verify a bearer token and load its sid and optional chain in one Redis call."""
+    payload = verify_token(token, settings)
+    sid = payload.get("sid")
+    if not isinstance(sid, str) or not sid:
+        raise jwt.InvalidTokenError("missing session id")
+    cid = payload.get("cid")
+    if cid is not None and (not isinstance(cid, str) or not cid):
+        raise jwt.InvalidTokenError("invalid chain id")
+    session = await session_store.get_session(sid, cid)
+    if session is None:
+        raise jwt.InvalidTokenError("session missing")
+    return session, payload

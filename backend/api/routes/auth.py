@@ -84,6 +84,7 @@ async def logout(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token")
     sid = payload.get("sid")
+    cid = payload.get("cid")
     sub = payload.get("sub")
     if not sid or not sub:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -92,7 +93,7 @@ async def logout(
     except ValueError:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token")
     try:
-        await service.logout(user_id, sid)
+        await service.logout(user_id, sid, str(cid) if cid else None)
     except AuthUnavailable:
         raise HTTPException(
             status_code=HTTP_503_SERVICE_UNAVAILABLE,
@@ -100,4 +101,7 @@ async def logout(
         )
     hub = getattr(request.app.state, "hub", None)
     if hub is not None:
-        await hub.disconnect_session(sid)
+        if cid:
+            await hub.disconnect_chain(sid, str(cid))
+        else:
+            await hub.disconnect_session(sid)

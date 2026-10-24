@@ -48,7 +48,7 @@ class AuthService:
         except redis.RedisError as e:
             raise AuthUnavailable from e
 
-        grant = await self._session_store.create_session(user.id, user.facility_id)
+        grant = await self._session_store.login_session(user.id, user.facility_id)
         await self._repository.touch_last_login(user.id)
 
         return LoginResponse(
@@ -60,5 +60,8 @@ class AuthService:
             session_expires_at=grant.session_expires_at,
         )
 
-    async def logout(self, user_id: UUID, sid: str) -> None:
-        await self._session_store.destroy_session(user_id, sid)
+    async def logout(self, user_id: UUID, sid: str, cid: str | None) -> None:
+        if cid is None:
+            await self._session_store.destroy_legacy_session(user_id, sid)
+        else:
+            await self._session_store.destroy_chain(user_id, sid, cid)

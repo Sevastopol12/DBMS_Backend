@@ -10,8 +10,7 @@ class AuthSettings:
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     session_ttl_seconds: int = 86400
-    access_ttl_seconds: int = 900
-    refresh_ttl_seconds: int = 1800
+    access_ttl_seconds: int = 600
     refresh_grace_seconds: int = 10
     ws_expiry_warning_seconds: int = 60
     ws_revalidate_seconds: int = 30
@@ -25,7 +24,6 @@ class AuthSettings:
         durations = {
             "session_ttl_seconds": self.session_ttl_seconds,
             "access_ttl_seconds": self.access_ttl_seconds,
-            "refresh_ttl_seconds": self.refresh_ttl_seconds,
             "refresh_grace_seconds": self.refresh_grace_seconds,
             "ws_expiry_warning_seconds": self.ws_expiry_warning_seconds,
             "ws_revalidate_seconds": self.ws_revalidate_seconds,
@@ -37,8 +35,6 @@ class AuthSettings:
             )
         if self.access_ttl_seconds > self.session_ttl_seconds:
             raise ValueError("access_ttl_seconds must not exceed session_ttl_seconds")
-        if self.refresh_ttl_seconds <= self.access_ttl_seconds:
-            raise ValueError("refresh_ttl_seconds must exceed access_ttl_seconds")
         if self.ws_expiry_warning_seconds >= self.access_ttl_seconds:
             raise ValueError(
                 "ws_expiry_warning_seconds must be less than access_ttl_seconds"
@@ -58,8 +54,7 @@ class AuthSettings:
             jwt_issuer=os.getenv("JWT_ISSUER"),
             jwt_audience=os.getenv("JWT_AUDIENCE"),
             session_ttl_seconds=int(os.getenv("AUTH_SESSION_TTL_SECONDS", "86400")),
-            access_ttl_seconds=int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")),
-            refresh_ttl_seconds=int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "1800")),
+            access_ttl_seconds=int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "600")),
             refresh_grace_seconds=int(os.getenv("AUTH_REFRESH_GRACE_SECONDS", "10")),
             ws_expiry_warning_seconds=int(
                 os.getenv("AUTH_WS_EXPIRY_WARNING_SECONDS", "60")

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 from datetime import datetime, timedelta
 from typing import Annotated
 
@@ -46,7 +47,7 @@ async def realtime_ws(
     await websocket.accept()
     resources: ApiResources = websocket.app.state.resources
     try:
-        session = await websocket_session(websocket, settings, session_store)
+        auth = await websocket_session(websocket, settings, session_store)
     except AuthUnavailable:
         await websocket.close(code=1013)
         return
@@ -54,19 +55,41 @@ async def realtime_ws(
         await websocket.close(code=4401)
         return
 
+    session = auth.session
+    sid = session.sid
+    cid_raw = auth.claims.get("cid")
+    cid = str(cid_raw) if cid_raw else None
+    connection_id = secrets.token_urlsafe(16)
     hub: RealtimeHub = websocket.app.state.hub
-    connection = hub.connect(websocket, session.facility_id, session.sid)
+    if cid:
+        try:
+            if not await session_store.claim_ws(sid, cid, connection_id):
+                await websocket.close(code=4401)
+                return
+        except AuthUnavailable:
+            await websocket.close(code=1013)
+            return
+
+    connection = hub.connect(websocket, session.facility_id, sid, cid)
     try:
-        session_expiry = await _session_expiry(resources.redis, session.sid)
+        session_expiry = await _session_expiry(resources.redis, sid)
+        refresh_expiry = None
+        if cid:
+            expiries = await session_store.chain_expiries(sid, cid)
+            if expiries is None:
+                await hub.disconnect(connection, 4401)
+                return
+            session_expiry, refresh_expiry = expiries
     except AuthUnavailable:
         await hub.disconnect(connection, 1013)
         return
+
     state = {
         "access_expires_at": _token_expiry(
             websocket.headers.get("authorization", ""), settings
         ),
         "session_expires_at": session_expiry,
-        "refresh_expires_at": None,
+        "refresh_expires_at": refresh_expiry,
     }
     refresh_changed = asyncio.Event()
 
@@ -82,8 +105,17 @@ async def realtime_ws(
                     continue
                 if not isinstance(frame, SessionRefresh):
                     continue
+                if cid is None:
+                    return 4401
                 try:
-                    grant = await session_store.rotate(frame.refresh_token)
+                    if not await session_store.owns_ws(sid, cid, connection_id):
+                        return 4409
+                except AuthUnavailable:
+                    return 1013
+                try:
+                    grant = await session_store.rotate(
+                        frame.refresh_token, expected_sid=sid, expected_cid=cid
+                    )
                 except RefreshInvalid:
                     hub.send(
                         connection,
@@ -105,6 +137,8 @@ async def realtime_ws(
                     )
                     await hub.flush(connection)
                     return 1013
+                if grant.sid != sid or grant.cid != cid:
+                    return 4401
                 state["access_expires_at"] = grant.access_expires_at
                 state["refresh_expires_at"] = grant.refresh_expires_at
                 state["session_expires_at"] = grant.session_expires_at
@@ -131,6 +165,8 @@ async def realtime_ws(
             access_expires_at = state["access_expires_at"]
             if now >= session_expires_at:
                 return 4401
+            if access_expires_at is not None and now >= access_expires_at:
+                return 4401
             if access_expires_at is not None:
                 warning_at = access_expires_at - timedelta(
                     seconds=settings.ws_expiry_warning_seconds
@@ -147,16 +183,26 @@ async def realtime_ws(
                     warned_for = access_expires_at
             if now >= next_revalidate:
                 try:
-                    if await session_store.get_session(session.sid) is None:
+                    if await session_store.get_session(sid, cid) is None:
                         return 4401
+                    if cid and not await session_store.owns_ws(sid, cid, connection_id):
+                        return 4409
                 except AuthUnavailable:
                     return 1013
                 next_revalidate = now + timedelta(
                     seconds=settings.ws_revalidate_seconds
                 )
-            wait_seconds = min(
-                settings.ws_revalidate_seconds,
-                max(0.05, (next_revalidate - now).total_seconds()),
+            deadlines = [next_revalidate, session_expires_at]
+            if access_expires_at is not None:
+                deadlines.append(access_expires_at)
+                if warned_for != access_expires_at:
+                    deadlines.append(
+                        access_expires_at
+                        - timedelta(seconds=settings.ws_expiry_warning_seconds)
+                    )
+            wait_seconds = max(
+                0.05,
+                min((deadline - now).total_seconds() for deadline in deadlines),
             )
             if refresh_changed.is_set():
                 refresh_changed.clear()

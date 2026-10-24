@@ -17,6 +17,7 @@ class Connection:
     websocket: WebSocket
     facility_id: UUID
     sid: str
+    cid: str | None = None
     queue: asyncio.Queue[OutgoingFrame] = field(
         default_factory=lambda: asyncio.Queue(_QUEUE_SIZE)
     )
@@ -63,8 +64,10 @@ class RealtimeHub:
         self._by_facility: dict[UUID, set[Connection]] = {}
         self._connections: set[Connection] = set()
 
-    def connect(self, websocket: WebSocket, facility_id: UUID, sid: str) -> Connection:
-        connection = Connection(websocket, facility_id, sid)
+    def connect(
+        self, websocket: WebSocket, facility_id: UUID, sid: str, cid: str | None = None
+    ) -> Connection:
+        connection = Connection(websocket, facility_id, sid, cid)
         connection.writer_task = asyncio.create_task(connection.writer())
         self._connections.add(connection)
         self._by_facility.setdefault(facility_id, set()).add(connection)
@@ -102,6 +105,16 @@ class RealtimeHub:
                 self.disconnect(connection, 4401)
                 for connection in tuple(self._connections)
                 if connection.sid == sid
+            ),
+            return_exceptions=True,
+        )
+
+    async def disconnect_chain(self, sid: str, cid: str) -> None:
+        await asyncio.gather(
+            *(
+                self.disconnect(connection, 4401)
+                for connection in tuple(self._connections)
+                if connection.sid == sid and connection.cid == cid
             ),
             return_exceptions=True,
         )

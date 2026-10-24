@@ -13,6 +13,7 @@ def create_token(
     sid: str,
     settings: AuthSettings,
     *,
+    cid: str,
     expires_at: datetime,
     issued_at: datetime | None = None,
 ) -> str:
@@ -20,6 +21,7 @@ def create_token(
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "sid": sid,
+        "cid": cid,
         "iat": issued_at or now_vietnam(),
         "exp": expires_at,
     }

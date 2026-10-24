@@ -1,26 +1,29 @@
+from dataclasses import dataclass
+from typing import Any
+
 import jwt
 from fastapi import WebSocket
 
+from backend.api.auth.dependencies import resolve_session_token
 from backend.api.auth.sessions import AuthSession, SessionStore
 from backend.api.auth.settings import AuthSettings
-from backend.api.auth.tokens import verify_token
+
+
+@dataclass(frozen=True)
+class WebSocketAuth:
+    session: AuthSession
+    claims: dict[str, Any]
 
 
 async def websocket_session(
     websocket: WebSocket, settings: AuthSettings, store: SessionStore
-) -> AuthSession:
+) -> WebSocketAuth:
     authorization = websocket.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise jwt.InvalidTokenError("missing bearer token")
-    payload = verify_token(token, settings)
-    sid = payload.get("sid")
-    if not sid:
-        raise jwt.InvalidTokenError("missing session id")
-    session = await store.get_session(str(sid))
-    if session is None:
-        raise jwt.InvalidTokenError("session missing")
-    return session
+    session, payload = await resolve_session_token(token, settings, store)
+    return WebSocketAuth(session, payload)
 
 
-__all__ = ["websocket_session"]
+__all__ = ["WebSocketAuth", "websocket_session"]
