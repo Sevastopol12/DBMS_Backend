@@ -53,7 +53,7 @@ def create_async_redis_client() -> async_redis.Redis:
         connection_class=connection_class,
         max_connections=10,
         socket_connect_timeout=1.0,
-        socket_timeout=2.0,
+        socket_timeout=None,
         health_check_interval=30,
     )
     return async_redis.Redis(connection_pool=pool)

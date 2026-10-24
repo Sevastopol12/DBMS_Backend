@@ -96,7 +96,10 @@ async def realtime_ws(
     async def receive() -> int:
         try:
             while True:
-                raw = await websocket.receive_text()
+                message = await websocket.receive()
+                raw = message.get("text")
+                if raw is None:
+                    return 1003
                 if len(raw.encode("utf-8")) > _MAX_FRAME_BYTES:
                     return 1009
                 try:
@@ -220,6 +223,7 @@ async def realtime_ws(
     tasks = [receiver_task, timer_task]
     if writer_task is not None:
         tasks.append(writer_task)
+    code = 1011
     try:
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         if writer_task in done:
@@ -229,12 +233,12 @@ async def realtime_ws(
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
-        await hub.disconnect(connection, code)
     finally:
         for task in tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await hub.disconnect(connection, code)
 
 
 def _token_expiry(authorization: str, settings: AuthSettings) -> datetime | None:
