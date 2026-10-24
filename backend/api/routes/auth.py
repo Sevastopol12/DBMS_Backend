@@ -19,14 +19,43 @@ from backend.api.auth.dependencies import (
 )
 from backend.api.auth.ratelimit import RateLimiter, RateLimitExceeded
 from backend.api.auth.service import AuthenticationFailed, AuthService
-from backend.api.auth.sessions import AuthUnavailable, SessionStore
+from backend.api.auth.sessions import (
+    AuthUnavailable,
+    RefreshInvalid,
+    RefreshReuseDetected,
+    SessionStore,
+)
 from backend.api.auth.settings import AuthSettings
 from backend.api.auth.tokens import verify_token
-from backend.api.data_objects.auth import LoginRequest, LoginResponse
+from backend.api.data_objects.auth import (
+    LoginRequest,
+    LoginResponse,
+    RefreshRequest,
+    RefreshResponse,
+)
 from backend.api.resources import ApiResources
 from backend.database.service.auth.repository import AuthRepository
 
 router = APIRouter()
+
+
+def _refresh_http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, (RefreshInvalid, RefreshReuseDetected)):
+        return HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED, detail="Refresh token is invalid"
+        )
+    if isinstance(exc, RateLimitExceeded):
+        return HTTPException(
+            status_code=HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded",
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    if isinstance(exc, AuthUnavailable):
+        return HTTPException(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        )
+    raise TypeError("Unsupported refresh error")
 
 
 def get_auth_service(
@@ -105,3 +134,20 @@ async def logout(
             await hub.disconnect_chain(sid, str(cid))
         else:
             await hub.disconnect_session(sid)
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+async def refresh(
+    req: RefreshRequest,
+    ip: Annotated[str, Depends(get_client_ip)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+) -> RefreshResponse:
+    try:
+        return await service.refresh(req.refresh_token, ip)
+    except (
+        RefreshInvalid,
+        RefreshReuseDetected,
+        RateLimitExceeded,
+        AuthUnavailable,
+    ) as exc:
+        raise _refresh_http_error(exc) from exc

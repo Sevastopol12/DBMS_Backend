@@ -424,6 +424,23 @@ def _write_metrics_cache(
     return facility_tokens
 
 
+def _publish_metrics_updates(
+    cache: MetricsCache, facility_tokens: list[str], computed_at: datetime
+) -> None:
+    payload_at = computed_at.isoformat()
+    for facility_id in facility_tokens:
+        try:
+            cache.publish(
+                METRICS_UPDATED_CHANNEL,
+                {"facility_id": facility_id, "computed_at": payload_at},
+            )
+        except Exception as exc:  # noqa: BLE001 - notification is best-effort
+            logger.warning(
+                "metrics update publish failed error=%s",
+                type(exc).__name__,
+            )
+
+
 class ComputeProcessor:
     """Run computation with task-owned database connection configs."""
 
@@ -520,21 +537,7 @@ class ComputeProcessor:
                 facility_tokens = _write_metrics_cache(
                     self._metrics_cache, result, run_at
                 )
-                payload_at = run_at.isoformat()
-                for facility_id in facility_tokens:
-                    try:
-                        self._metrics_cache.publish(
-                            METRICS_UPDATED_CHANNEL,
-                            {
-                                "facility_id": facility_id,
-                                "computed_at": payload_at,
-                            },
-                        )
-                    except Exception as exc:  # noqa: BLE001 - notification is best-effort
-                        logger.warning(
-                            "metrics update publish failed error=%s",
-                            type(exc).__name__,
-                        )
+                _publish_metrics_updates(self._metrics_cache, facility_tokens, run_at)
             except Exception as exc:  # noqa: BLE001 - post-run cleanup is best-effort
                 logger.warning(
                     "metrics cache write failed run_id=%s error=%s",

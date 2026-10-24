@@ -2,6 +2,7 @@ import asyncio
 
 import redis
 
+from backend.api.auth.sessions import AuthUnavailable
 from backend.api.auth.settings import AuthSettings
 
 
@@ -73,3 +74,35 @@ class RateLimiter:
             self._client.delete(user_key)
 
         await asyncio.to_thread(_execute)
+
+    async def check_refresh_ip(self, ip: str) -> None:
+        """Limit refresh attempts per IP using WATCH/MULTI, without Lua."""
+        await asyncio.to_thread(self._check_refresh_ip, ip)
+
+    def _check_refresh_ip(self, ip: str) -> None:
+        key = f"auth:rl:refresh:ip:{ip}"
+        window = self._settings.refresh_window_seconds
+
+        try:
+            for _ in range(self._settings.max_rotate_attempts):
+                pipe = self._client.pipeline()
+                try:
+                    pipe.watch(key)
+                    count = int(pipe.get(key) or 0)
+                    ttl = pipe.ttl(key)
+                    if count >= self._settings.refresh_ip_max_failures:
+                        pipe.unwatch()
+                        raise RateLimitExceeded(retry_after=max(1, int(ttl)))
+                    pipe.multi()
+                    pipe.incr(key)
+                    if count == 0:
+                        pipe.expire(key, window)
+                    pipe.execute()
+                    return
+                except redis.WatchError:
+                    continue
+                finally:
+                    pipe.reset()
+            raise AuthUnavailable
+        except redis.RedisError as exc:
+            raise AuthUnavailable from exc

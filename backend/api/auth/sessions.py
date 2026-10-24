@@ -262,19 +262,22 @@ class SessionStore:
         expected_cid: str | None = None,
     ) -> SessionGrant:
         token_hash = _hash_token(refresh_token)
+        return await asyncio.to_thread(
+            self._rotate, token_hash, expected_sid, expected_cid
+        )
 
-        def _rotate() -> SessionGrant:
-            try:
-                for _ in range(self._settings.max_rotate_attempts):
-                    try:
-                        return self._rotate_once(token_hash, expected_sid, expected_cid)
-                    except redis.WatchError:
-                        continue
-            except redis.RedisError as exc:
-                raise AuthUnavailable from exc
-            raise AuthUnavailable
-
-        return await asyncio.to_thread(_rotate)
+    def _rotate(
+        self, token_hash: str, expected_sid: str | None, expected_cid: str | None
+    ) -> SessionGrant:
+        try:
+            for _ in range(self._settings.max_rotate_attempts):
+                try:
+                    return self._rotate_once(token_hash, expected_sid, expected_cid)
+                except redis.WatchError:
+                    continue
+        except redis.RedisError as exc:
+            raise AuthUnavailable from exc
+        raise AuthUnavailable
 
     def _rotate_once(
         self, token_hash: str, expected_sid: str | None, expected_cid: str | None

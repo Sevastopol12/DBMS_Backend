@@ -6,7 +6,7 @@ from backend.api.auth.passwords import DUMMY_HASH, verify_password
 from backend.api.auth.ratelimit import RateLimiter
 from backend.api.auth.sessions import AuthUnavailable, SessionStore
 from backend.api.auth.settings import AuthSettings
-from backend.api.data_objects.auth import LoginResponse
+from backend.api.data_objects.auth import LoginResponse, RefreshResponse
 from backend.database.service.auth.repository import AuthRepository
 
 
@@ -65,3 +65,14 @@ class AuthService:
             await self._session_store.destroy_legacy_session(user_id, sid)
         else:
             await self._session_store.destroy_chain(user_id, sid, cid)
+
+    async def refresh(self, refresh_token: str, ip: str) -> RefreshResponse:
+        await self._rate_limiter.check_refresh_ip(ip)
+        grant = await self._session_store.rotate(refresh_token)
+        return RefreshResponse(
+            session_token=grant.session_token,
+            refresh_token=grant.refresh_token,
+            access_expires_at=grant.access_expires_at,
+            refresh_expires_at=grant.refresh_expires_at,
+            session_expires_at=grant.session_expires_at,
+        )

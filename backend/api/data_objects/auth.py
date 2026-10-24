@@ -21,4 +21,20 @@ class LoginResponse(BaseModel):
     session_expires_at: ApiDateTime
 
 
-__all__ = ["LoginRequest", "LoginResponse"]
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_token: str
+    refresh_token: str
+    access_expires_at: ApiDateTime
+    refresh_expires_at: ApiDateTime
+    session_expires_at: ApiDateTime
+
+
+__all__ = ["LoginRequest", "LoginResponse", "RefreshRequest", "RefreshResponse"]

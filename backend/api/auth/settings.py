@@ -17,21 +17,27 @@ class AuthSettings:
     login_max_failures: int = 5
     login_ip_max_failures: int = 30
     login_window_seconds: int = 900
+    refresh_ip_max_failures: int = 30
+    refresh_window_seconds: int = 900
     trusted_proxy_hops: int = 0
     max_rotate_attempts: int = 3
 
     def __post_init__(self) -> None:
-        durations = {
+        positive_values = {
             "session_ttl_seconds": self.session_ttl_seconds,
             "access_ttl_seconds": self.access_ttl_seconds,
             "refresh_grace_seconds": self.refresh_grace_seconds,
             "ws_expiry_warning_seconds": self.ws_expiry_warning_seconds,
             "ws_revalidate_seconds": self.ws_revalidate_seconds,
+            "refresh_ip_max_failures": self.refresh_ip_max_failures,
+            "refresh_window_seconds": self.refresh_window_seconds,
         }
-        non_positive = sorted(name for name, value in durations.items() if value <= 0)
+        non_positive = sorted(
+            name for name, value in positive_values.items() if value <= 0
+        )
         if non_positive:
             raise ValueError(
-                f"Auth durations must be positive: {', '.join(non_positive)}"
+                f"Auth settings must be positive: {', '.join(non_positive)}"
             )
         if self.access_ttl_seconds > self.session_ttl_seconds:
             raise ValueError("access_ttl_seconds must not exceed session_ttl_seconds")
@@ -63,6 +69,10 @@ class AuthSettings:
             login_max_failures=int(os.getenv("AUTH_LOGIN_MAX_FAILURES", "5")),
             login_ip_max_failures=int(os.getenv("AUTH_LOGIN_IP_MAX_FAILURES", "30")),
             login_window_seconds=int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "900")),
+            refresh_ip_max_failures=int(
+                os.getenv("AUTH_REFRESH_IP_MAX_FAILURES", "30")
+            ),
+            refresh_window_seconds=int(os.getenv("AUTH_REFRESH_WINDOW_SECONDS", "900")),
             trusted_proxy_hops=int(os.getenv("AUTH_TRUSTED_PROXY_HOPS", "0")),
             max_rotate_attempts=3,
         )
