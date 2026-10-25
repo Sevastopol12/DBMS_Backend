@@ -1,3 +1,4 @@
+import os
 from uuid import UUID, uuid4
 
 from backend.api.data_objects.ingestion import (
@@ -20,9 +21,25 @@ SUPPORTED_CONTENT_TYPES = {
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
+DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+
+def max_upload_bytes_from_env() -> int:
+    """Maximum upload size in bytes (A-3); ``0`` means unlimited."""
+
+    try:
+        limit = int(os.getenv("MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES)))
+    except ValueError:
+        return DEFAULT_MAX_UPLOAD_BYTES
+    return max(0, limit)
+
 
 class ParentNotFoundError(Exception):
     pass
+
+
+class UploadTooLargeError(ValueError):
+    """The stored object is larger than the configured upload limit."""
 
 
 class ParentArtifactExpiredError(Exception):
@@ -73,9 +90,16 @@ class IngestionService:
 
         file_metadata = await self._storage.get_file_metadata(complete_object_key)
 
-        if completion_request.size_bytes != int(file_metadata.get("ContentLength", 0)):
+        stored_size = int(file_metadata.get("ContentLength", 0))
+        if completion_request.size_bytes != stored_size:
             raise ValueError(
                 "Uploaded object size does not match the completion request"
+            )
+
+        limit = max_upload_bytes_from_env()
+        if limit > 0 and max(completion_request.size_bytes, stored_size) > limit:
+            raise UploadTooLargeError(
+                "Uploaded object exceeds the maximum allowed size"
             )
         now = now_vietnam()
 
@@ -99,9 +123,12 @@ class IngestionService:
 
 
 __all__ = [
+    "DEFAULT_MAX_UPLOAD_BYTES",
     "SUPPORTED_CONTENT_TYPES",
     "XLSX_CONTENT_TYPE",
     "IngestionService",
     "ParentArtifactExpiredError",
     "ParentNotFoundError",
+    "UploadTooLargeError",
+    "max_upload_bytes_from_env",
 ]

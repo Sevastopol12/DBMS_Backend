@@ -15,6 +15,7 @@ from backend.api.data_objects.ingestion import (
 from backend.api.dependencies import get_ingestion_repository, get_storage_service
 from backend.api.services.ingestion import (
     IngestionService,
+    UploadTooLargeError,
 )
 from backend.database.errors import (
     FileObjectNotFound,
@@ -80,6 +81,11 @@ async def complete_upload(
     except FileObjectNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        ) from exc
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=str(exc),
         ) from exc
     except ValueError as exc:
         raise HTTPException(
